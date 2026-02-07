@@ -31,17 +31,17 @@ Antioch is a Python library that lets you create rich, interactive web applicati
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/antioch.git
+git clone https://github.com/nielrya4/Antioch.git
 cd antioch
 
 # Download Pyodide runtime (required - ~420MB)
-# Option 1: Direct download
+# Option 1: Use the download script (recommended)
+python download_pyodide.py
+
+# Option 2: Manual download
 wget https://github.com/pyodide/pyodide/releases/download/0.24.1/pyodide-0.24.1.tar.bz2
 tar -xjf pyodide-0.24.1.tar.bz2
 mv pyodide pyodide/
-
-# Option 2: Use the download script (if provided)
-python download_pyodide.py
 ```
 
 ### Hello World
