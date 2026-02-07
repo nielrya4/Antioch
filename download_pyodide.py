@@ -153,8 +153,8 @@ def main():
     print()
     print("Next steps:")
     print("  1. Edit scripts/main.py to create your application")
-    print("  2. Run: python build.py")
-    print("  3. Serve: python -m http.server -d output 8000")
+    print("  2. Run: python3 -m build")
+    print("  3. Serve: python3 -m http.server -d output 8000")
     print("=" * 60)
 
     return 0

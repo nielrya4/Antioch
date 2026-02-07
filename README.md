@@ -36,7 +36,7 @@ cd antioch
 
 # Download Pyodide runtime (required - ~420MB)
 # Option 1: Use the download script (recommended)
-python download_pyodide.py
+python download_pyodide
 
 # Option 2: Manual download
 wget https://github.com/pyodide/pyodide/releases/download/0.24.1/pyodide-0.24.1.tar.bz2
