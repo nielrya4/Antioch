@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 # Pyodide configuration
-PYODIDE_VERSION = "0.24.1"
+PYODIDE_VERSION = "0.29.3"
 PYODIDE_URL = f"https://github.com/pyodide/pyodide/releases/download/{PYODIDE_VERSION}/pyodide-{PYODIDE_VERSION}.tar.bz2"
 PYODIDE_FILENAME = f"pyodide-{PYODIDE_VERSION}.tar.bz2"
 PYODIDE_DIR = "pyodide"

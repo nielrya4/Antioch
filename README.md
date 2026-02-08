@@ -23,6 +23,7 @@ Antioch is a Python library that lets you create rich, interactive web applicati
 - **Filesystem**: File selector, upload, download
 - **Navigation**: Multi-level toolbar with nested menus
 - **Feedback**: Alerts, toasts, progress bars
+- **Code Editing**: Syntax-highlighted code viewer/editor (CodeMirror)
 - **Canvas**: Button, interactive widgets for custom rendering
 
 ## Quick Start
@@ -99,6 +100,7 @@ The project includes 20+ comprehensive examples in `scripts/examples/`:
 - **map_demo.py** - Interactive maps with Leaflet
 - **form_demo.py** - Form validation and handling
 - **canvas_demo.py** - Canvas-based graphics
+- **code_block_demo.py** - Syntax-highlighted code editor
 - And many more...
 
 To run an example, modify `scripts/main.py` to import and run it, then rebuild:
@@ -345,7 +347,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Project Stats
 
 - **Core Library**: ~2,100 lines of Python
-- **Component Library**: 28 reusable macros
+- **Component Library**: 29 reusable macros
 - **Examples**: 20+ demonstration scripts
 - **Documentation**: 5 comprehensive guides
 - **Zero Dependencies**: (except Pyodide runtime)
@@ -357,6 +359,7 @@ Built with [Pyodide](https://pyodide.org/) - Python for the browser powered by W
 External library integrations:
 - [Chart.js](https://www.chartjs.org/) for charts
 - [Leaflet](https://leafletjs.com/) for maps
+- [CodeMirror](https://codemirror.net/) for code editing
 
 ---
 

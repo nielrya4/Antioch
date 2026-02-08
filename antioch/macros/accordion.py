@@ -176,10 +176,14 @@ class Accordion(Macro):
         # Panel content
         content_div = Div(style={
             **self._content_style,
-            "display": "block" if panel.expanded else "none",
-            "transition": "all 0.3s ease"
+            "max_height": "2000px" if panel.expanded else "0",
+            "opacity": "1" if panel.expanded else "0",
+            "padding_top": self._content_style.get("padding", "20px") if panel.expanded else "0",
+            "padding_bottom": self._content_style.get("padding", "20px") if panel.expanded else "0",
+            "overflow": "hidden",
+            "transition": "max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease"
         })
-        
+
         # Add content
         if panel.content:
             if isinstance(panel.content, str):
@@ -187,7 +191,10 @@ class Accordion(Macro):
                 content_div.add(P(panel.content))
             else:
                 content_div.add(panel.content)
-        
+                # If panel is initially expanded and content is a Macro, ensure it's initialized
+                if panel.expanded and hasattr(panel.content, 'ensure_initialized'):
+                    panel.content.ensure_initialized()
+
         panel.content_element = content_div
         
         panel_container.add(header_btn, content_div)
@@ -215,16 +222,24 @@ class Accordion(Macro):
             for other_panel in panels:
                 if other_panel != panel and other_panel.expanded:
                     self._collapse_panel(other_panel, trigger_callbacks=False)
-        
+
         panel.expanded = True
-        
-        # Update UI
+
+        # Update UI with animation
         if panel.content_element:
-            panel.content_element.style.display = "block"
-        
+            panel.content_element.style.max_height = "2000px"
+            panel.content_element.style.opacity = "1"
+            # Restore padding
+            padding = self._content_style.get("padding", "20px")
+            panel.content_element.style.padding_top = padding
+            panel.content_element.style.padding_bottom = padding
+            # If content is a Macro with ensure_initialized, call it
+            if hasattr(panel.content, 'ensure_initialized'):
+                panel.content.ensure_initialized()
+
         if panel.icon_element:
             panel.icon_element.style.transform = "rotate(0deg)"
-        
+
         # Trigger callbacks
         self._trigger_callbacks('panel_expand', panel)
         self._trigger_callbacks('change', panel, 'expand')
@@ -232,14 +247,18 @@ class Accordion(Macro):
     def _collapse_panel(self, panel, trigger_callbacks=True):
         """Collapse a panel."""
         panel.expanded = False
-        
-        # Update UI
+
+        # Update UI with animation
         if panel.content_element:
-            panel.content_element.style.display = "none"
-        
+            panel.content_element.style.max_height = "0"
+            panel.content_element.style.opacity = "0"
+            # Remove padding to eliminate gap
+            panel.content_element.style.padding_top = "0"
+            panel.content_element.style.padding_bottom = "0"
+
         if panel.icon_element:
             panel.icon_element.style.transform = "rotate(-90deg)"
-        
+
         # Trigger callbacks
         if trigger_callbacks:
             self._trigger_callbacks('panel_collapse', panel)

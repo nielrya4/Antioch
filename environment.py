@@ -1,5 +1,11 @@
-def init_environment(output_folder: str, scripts_folder: str = "scripts") -> str:
-    """Setup antioch environment by copying necessary files to output folder."""
+def init_environment(output_folder: str, scripts_folder: str = "scripts", use_cdn_pyodide: bool = False) -> str:
+    """Setup antioch environment by copying necessary files to output folder.
+
+    Args:
+        output_folder: Destination folder for build output
+        scripts_folder: Source folder containing Python scripts
+        use_cdn_pyodide: If True, skip copying pyodide (will load from CDN)
+    """
     import os
     import shutil
     from pathlib import Path
@@ -10,18 +16,21 @@ def init_environment(output_folder: str, scripts_folder: str = "scripts") -> str
     output_path.mkdir(parents=True, exist_ok=True)
     print(f"Created output directory: {output_path}")
 
-    # Copy pyodide folder if it exists
-    pyodide_sources = ["./pyodide", "../pyodide", "pyodide"]
-    for pyodide_src in pyodide_sources:
-        if os.path.exists(pyodide_src):
-            pyodide_dest = output_path / "pyodide"
-            if pyodide_dest.exists():
-                shutil.rmtree(pyodide_dest)
-            shutil.copytree(pyodide_src, pyodide_dest)
-            print(f"Copied pyodide folder from {pyodide_src} to {pyodide_dest}")
-            break
+    # Copy pyodide folder if using local (not CDN)
+    if not use_cdn_pyodide:
+        pyodide_sources = ["./pyodide", "../pyodide", "pyodide"]
+        for pyodide_src in pyodide_sources:
+            if os.path.exists(pyodide_src):
+                pyodide_dest = output_path / "pyodide"
+                if pyodide_dest.exists():
+                    shutil.rmtree(pyodide_dest)
+                shutil.copytree(pyodide_src, pyodide_dest)
+                print(f"Copied pyodide folder from {pyodide_src} to {pyodide_dest}")
+                break
+        else:
+            print("Warning: pyodide folder not found - run download_pyodide.py first")
     else:
-        print("Warning: pyodide folder not found")
+        print("Using CDN for Pyodide (skipping local copy)")
 
     # Copy antioch library
     if os.path.exists("antioch"):
@@ -55,14 +64,22 @@ def build_page(
         additional_directories: list = None,
         pyodide_packages: list = None,
         local_packages: list = None,
-        pypi_packages: list = None
+        pypi_packages: list = None,
+        use_cdn_pyodide: bool = False,
+        pyodide_version: str = "0.24.1"
 ) -> str:
     """
     Generate Pyodide-powered HTML app for antioch library.
 
-    - pyodide_packages: list of packages to load from Pyodide (numpy, matplotlib, etc.)
-    - local_packages: list of local packages/directories to include as modules
-    - pypi_packages: list of packages to install from PyPI via micropip
+    Args:
+        filename: Output HTML filename
+        scripts_folder: Source folder for Python scripts
+        additional_directories: Extra directories to create in VFS
+        pyodide_packages: list of packages to load from Pyodide (numpy, matplotlib, etc.)
+        local_packages: list of local packages/directories to include as modules
+        pypi_packages: list of packages to install from PyPI via micropip
+        use_cdn_pyodide: If True, load Pyodide from CDN instead of local folder
+        pyodide_version: Pyodide version to use when loading from CDN
     """
     import os
     import glob
@@ -96,6 +113,14 @@ def build_page(
                 rel_path = os.path.relpath(os.path.join(root, file), ".")
                 asset_files.append(rel_path)
 
+    # Determine Pyodide source URLs
+    if use_cdn_pyodide:
+        pyodide_js_url = f"https://cdn.jsdelivr.net/pyodide/v{pyodide_version}/full/pyodide.js"
+        pyodide_index_url = f"https://cdn.jsdelivr.net/pyodide/v{pyodide_version}/full/"
+    else:
+        pyodide_js_url = "pyodide/pyodide.js"
+        pyodide_index_url = "./pyodide/"
+
     # Generate the HTML template
     html_content = f'''<!DOCTYPE html>
 <html lang="en">
@@ -103,7 +128,7 @@ def build_page(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Antioch - Python DOM Library</title>
-<script src="pyodide/pyodide.js"></script>
+<script src="{pyodide_js_url}"></script>
 
 <!-- JavaScript libraries are loaded dynamically when imported -->
 
@@ -149,8 +174,8 @@ body {{
 <script>
 async function initializeApp() {{
     try {{
-        // Initialize Pyodide with local installation
-        const pyodide = await loadPyodide({{ indexURL: "./pyodide/" }});
+        // Initialize Pyodide
+        const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
         
         // Load Pyodide packages first
         const pyodidePackages = {pyodide_packages or ['micropip']};

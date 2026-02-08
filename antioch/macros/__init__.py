@@ -24,6 +24,7 @@ Available Components:
 - DownloadLink: Download link for URLs, data strings, or VFS files
 - Window: Draggable, resizable window with minimize/maximize/close
 - WindowManager: Manages all windows with taskbar and window management
+- CodeBlock: Syntax-highlighted code viewer/editor with CodeMirror
 
 Base Classes for Creating Custom Macros:
 - Macro: Base class with common functionality (ID management, callbacks, styling)
@@ -55,6 +56,7 @@ from .file_upload import FileUpload
 from .download_link import DownloadLink
 from .window import Window
 from .window_manager import WindowManager
+from .code_block import CodeBlock
 
 __all__ = [
     # Base classes for custom macros
@@ -83,6 +85,7 @@ __all__ = [
     'DownloadLink',
     'Window',
     'WindowManager',
+    'CodeBlock',
 
     # Form-related classes
     'FormField',

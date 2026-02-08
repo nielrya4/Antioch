@@ -33,7 +33,26 @@ class Toolbar(Macro):
                 "Paste": lambda: paste()
             }
         }
+
+        # Basic toolbar
         toolbar = Toolbar(menu_structure)
+
+        # Customized with colors and gradient
+        toolbar = Toolbar(
+            menu_structure,
+            toolbar_style={
+                "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                "box_shadow": "0 4px 6px rgba(0,0,0,0.3)"
+            },
+            menu_item_style={
+                "color": "#ffffff",
+                "font_weight": "bold"
+            },
+            dropdown_style={
+                "background_color": "#f0f0f0",
+                "border": "2px solid #667eea"
+            }
+        )
     """
 
     def __init__(self, menu_structure: Dict[str, Any] = None,
@@ -51,9 +70,14 @@ class Toolbar(Macro):
                 - Callable: Direct action to execute
                 - Dict: Submenu with more options
             toolbar_style: Custom styles for the toolbar bar
+                Can override: background_color, background (for gradients),
+                box_shadow, padding, etc.
             menu_item_style: Custom styles for top-level menu items
+                Can override: color, font_size, font_weight, padding, etc.
             dropdown_style: Custom styles for dropdown menus
+                Can override: background_color, border, box_shadow, etc.
             submenu_style: Custom styles for submenu items
+                Can override: color, font_size, padding, etc.
         """
         super().__init__(macro_type="toolbar", **kwargs)
 
@@ -70,6 +94,8 @@ class Toolbar(Macro):
         self._click_outside_handler = None
         self._escape_handler = None
         self._resize_handler = None
+        self._mobile_click_outside_handler = None
+        self._mobile_escape_handler = None
 
         # Track all open mobile submenus for proper closing
         self._open_mobile_submenus = []
@@ -178,11 +204,14 @@ class Toolbar(Macro):
 
     def _create_hamburger(self):
         """Create the hamburger menu button for mobile."""
+        # Use menu item color for hamburger
+        text_color = self._menu_item_style.get("color", "#ecf0f1")
+
         hamburger = self._register_element('hamburger', Div(style={
             "display": "none",  # Hidden by default (desktop)
             "padding": "12px 20px",
             "cursor": "pointer",
-            "color": "#ecf0f1",
+            "color": text_color,
             "font_size": "20px",
             "transition": "background-color 0.3s ease"
         }))
@@ -191,7 +220,7 @@ class Toolbar(Macro):
         bar_style = {
             "width": "25px",
             "height": "3px",
-            "background_color": "#ecf0f1",
+            "background_color": text_color,
             "margin": "4px 0",
             "border_radius": "2px",
             "transition": "background-color 0.3s ease"
@@ -214,13 +243,15 @@ class Toolbar(Macro):
 
     def _create_mobile_menu(self):
         """Create the mobile menu dropdown."""
+        # Use toolbar background color for mobile menu
+        bg_color = self._toolbar_style.get("background_color", "#2c3e50")
         mobile_menu = self._register_element('mobile_menu', Div(style={
             "display": "none",  # Hidden by default
             "position": "absolute",
             "top": "100%",
             "left": "0",
             "width": "100%",
-            "background_color": "#2c3e50",
+            "background_color": bg_color,
             "box_shadow": "0 4px 8px rgba(0,0,0,0.15)",
             "z_index": "999",
             "max_height": "80vh",
@@ -237,6 +268,9 @@ class Toolbar(Macro):
 
     def _create_mobile_menu_item(self, label: str, content: Union[Callable, Dict]):
         """Create a mobile menu item."""
+        # Use menu item color from toolbar style
+        text_color = self._menu_item_style.get("color", "#ecf0f1")
+
         container = Div(style={
             "border_bottom": "1px solid #34495e"
         })
@@ -244,7 +278,7 @@ class Toolbar(Macro):
         # Menu button
         menu_button = Div(label, style={
             "padding": "15px 20px",
-            "color": "#ecf0f1",
+            "color": text_color,
             "cursor": "pointer",
             "font_size": "16px",
             "background": "none",
@@ -278,9 +312,13 @@ class Toolbar(Macro):
 
     def _create_mobile_submenu(self, submenu_content: Dict):
         """Create a mobile submenu (expandable)."""
+        # Use toolbar background color for submenu
+        bg_color = self._toolbar_style.get("background_color", "#2c3e50")
+        text_color = self._menu_item_style.get("color", "#ecf0f1")
+
         submenu = Div(style={
             "display": "none",  # Hidden by default
-            "background_color": "#2c3e50",
+            "background_color": bg_color,
             "padding": "0"
         })
 
@@ -289,10 +327,10 @@ class Toolbar(Macro):
                 # Leaf item
                 item = Div(item_label, style={
                     "padding": "12px 20px 12px 40px",
-                    "color": "#ecf0f1",
+                    "color": text_color,
                     "cursor": "pointer",
                     "font_size": "14px",
-                    "border_bottom": "1px solid #2c3e50",
+                    "border_bottom": f"1px solid {bg_color}",
                     "transition": "background-color 0.3s ease"
                 })
                 # Add hover effects
@@ -304,10 +342,10 @@ class Toolbar(Macro):
                 # Nested submenu
                 nested_label = Div(item_label, style={
                     "padding": "12px 20px 12px 40px",
-                    "color": "#ecf0f1",
+                    "color": text_color,
                     "cursor": "pointer",
                     "font_size": "14px",
-                    "border_bottom": "1px solid #2c3e50",
+                    "border_bottom": f"1px solid {bg_color}",
                     "transition": "background-color 0.3s ease"
                 })
                 # Add hover effects
@@ -327,22 +365,46 @@ class Toolbar(Macro):
         is_open = self._get_state('mobile_menu_open')
 
         if is_open:
-            mobile_menu.style.display = "none"
-            self._set_state(mobile_menu_open=False)
+            self._close_mobile_menu()
         else:
-            mobile_menu.style.display = "block"
-            self._set_state(mobile_menu_open=True)
+            self._open_mobile_menu()
+
+    def _open_mobile_menu(self):
+        """Open the mobile menu."""
+        mobile_menu = self._get_element('mobile_menu')
+        mobile_menu.style.display = "block"
+        self._set_state(mobile_menu_open=True)
+
+        # Add click outside and escape listeners
+        self._add_mobile_click_outside_listener()
+        self._add_mobile_escape_listener()
+
+    def _close_mobile_menu(self):
+        """Close the mobile menu."""
+        mobile_menu = self._get_element('mobile_menu')
+        mobile_menu.style.display = "none"
+        self._set_state(mobile_menu_open=False)
+
+        # Close all open submenus
+        self._close_all_mobile_submenus()
+
+        # Remove listeners
+        self._remove_mobile_click_outside_listener()
+        self._remove_mobile_escape_listener()
 
     def _toggle_mobile_submenu(self, submenu: Div):
         """Toggle a mobile submenu."""
-        # Check if this submenu is currently open (before we close anything)
+        # Check if this submenu is currently open
         was_open = submenu in self._open_mobile_submenus
 
-        # Close all open mobile submenus that are NOT ancestors of this submenu
-        self._close_sibling_mobile_submenus(submenu)
-
-        # If this submenu was not open, open it now
-        if not was_open:
+        if was_open:
+            # Close this submenu if it was open
+            submenu.style.display = "none"
+            self._open_mobile_submenus.remove(submenu)
+        else:
+            # Close all open mobile submenus that are NOT ancestors of this submenu
+            self._close_sibling_mobile_submenus(submenu)
+            # Open this submenu
             submenu.style.display = "block"
             self._open_mobile_submenus.append(submenu)
 
@@ -688,6 +750,39 @@ class Toolbar(Macro):
             js.document.removeEventListener('keydown', self._escape_handler)
             self._escape_handler = None
 
+    def _add_mobile_click_outside_listener(self):
+        """Add global click listener to close mobile menu when clicking outside."""
+        if self._mobile_click_outside_handler is None:
+            def handle_mobile_click_outside(event):
+                toolbar_element = self._get_element('toolbar')
+                if toolbar_element and toolbar_element._dom_element:
+                    if not toolbar_element._dom_element.contains(event.target):
+                        self._close_mobile_menu()
+            self._mobile_click_outside_handler = create_proxy(handle_mobile_click_outside)
+            js.document.addEventListener('click', self._mobile_click_outside_handler)
+
+    def _remove_mobile_click_outside_listener(self):
+        """Remove mobile click outside listener."""
+        if self._mobile_click_outside_handler is not None:
+            js.document.removeEventListener('click', self._mobile_click_outside_handler)
+            self._mobile_click_outside_handler = None
+
+    def _add_mobile_escape_listener(self):
+        """Add escape key listener to close mobile menu."""
+        if self._mobile_escape_handler is None:
+            def handle_mobile_escape(event):
+                if event.key == "Escape":
+                    self._close_mobile_menu()
+
+            self._mobile_escape_handler = create_proxy(handle_mobile_escape)
+            js.document.addEventListener('keydown', self._mobile_escape_handler)
+
+    def _remove_mobile_escape_listener(self):
+        """Remove mobile escape key listener."""
+        if self._mobile_escape_handler is not None:
+            js.document.removeEventListener('keydown', self._mobile_escape_handler)
+            self._mobile_escape_handler = None
+
     def update_menu(self, menu_structure: Dict[str, Any]):
         """
         Update the entire menu structure.
@@ -727,5 +822,7 @@ class Toolbar(Macro):
         """Clean up the toolbar."""
         self._remove_click_outside_listener()
         self._remove_escape_listener()
+        self._remove_mobile_click_outside_listener()
+        self._remove_mobile_escape_listener()
         self._remove_resize_listener()
         super().destroy()

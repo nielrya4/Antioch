@@ -28,6 +28,7 @@ def add_toolbar():
         toolbar_style={
             "background_color": "#1e272e",
             "box_shadow": "0 2px 6px rgba(0,0,0,0.2)"
+
         }
     )
     DOM.add(toolbar)
