@@ -5,6 +5,7 @@ Provides common functionality for ID management, styling, callbacks, and element
 import uuid
 from typing import Dict, Any, List, Callable, Optional, Union
 from ..elements import Div
+from pyodide.ffi import create_proxy
 
 
 class Macro:
@@ -49,7 +50,10 @@ class Macro:
         # State management
         self._state = {}
         self._destroyed = False
-        
+
+        # Proxy management - store all Pyodide proxies to prevent GC
+        self._proxies: List[Any] = []
+
         # Store constructor kwargs for subclass access
         self._kwargs = kwargs
     
@@ -308,28 +312,50 @@ class Macro:
             self._root_element.style.update(styles)
         return self
     
+    def _create_proxy(self, handler: Callable) -> Any:
+        """
+        Create a Pyodide proxy and store it to prevent garbage collection.
+
+        Args:
+            handler: Python function to wrap in a proxy
+
+        Returns:
+            The created proxy object
+        """
+        proxy = create_proxy(handler)
+        self._proxies.append(proxy)
+        return proxy
+
     def destroy(self):
         """
         Destroy this macro and clean up resources.
-        Removes from DOM and clears all callbacks.
+        Removes from DOM, clears all callbacks, and destroys all proxies.
         """
         if self._destroyed:
             return
-            
+
         # Trigger destroy callbacks
         self._trigger_callbacks('destroy')
-        
+
         # Remove from DOM
         if self._root_element:
             self._root_element.remove()
-        
+
+        # Destroy all proxies to prevent memory leaks
+        for proxy in self._proxies:
+            try:
+                proxy.destroy()
+            except:
+                pass  # Ignore errors if proxy already destroyed
+        self._proxies.clear()
+
         # Clear all callbacks
         self._callbacks.clear()
-        
+
         # Clear element references
         self._elements.clear()
         self._root_element = None
-        
+
         # Mark as destroyed
         self._destroyed = True
     

@@ -4,6 +4,7 @@ Uses unique IDs and safe event handling for multiple instances.
 """
 from .base import Macro
 from ..elements import Div, Button, H3, P, Span
+from ..events import Events
 import js
 
 
@@ -201,11 +202,11 @@ class Modal(Macro):
             overlay = self._get_element('overlay')
             overlay.style.display = "flex"
             self._set_state(is_open=True)
-            
+
             # Add escape key listener
             if self._get_state('escape_key_close'):
-                js.document.addEventListener("keydown", self._handle_escape_key)
-            
+                Events.add_listener('keydown', self._handle_escape_key, owner=self)
+
             self._trigger_callbacks('open')
         return self
     
@@ -215,11 +216,11 @@ class Modal(Macro):
             overlay = self._get_element('overlay')
             overlay.style.display = "none"
             self._set_state(is_open=False)
-            
+
             # Remove escape key listener
             if self._get_state('escape_key_close'):
-                js.document.removeEventListener("keydown", self._handle_escape_key)
-            
+                Events.remove_listener('keydown', self._handle_escape_key)
+
             self._trigger_callbacks('close')
         return self
     

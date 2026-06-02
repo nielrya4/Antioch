@@ -158,6 +158,10 @@ class Element:
         """Add a single event listener."""
         if handler:
             proxy_handler = create_proxy(handler)
+            # Store proxy reference to prevent Pyodide GC
+            if not hasattr(self, '_proxies'):
+                self._proxies = []
+            self._proxies.append(proxy_handler)
             self._dom_element.addEventListener(event, proxy_handler)
         return self
     
@@ -166,6 +170,10 @@ class Element:
         for event, handler in event_handlers.items():
             if handler:
                 proxy_handler = create_proxy(handler)
+                # Store proxy reference to prevent Pyodide GC
+                if not hasattr(self, '_proxies'):
+                    self._proxies = []
+                self._proxies.append(proxy_handler)
                 self._dom_element.addEventListener(event, proxy_handler)
         return self
     

@@ -1,9 +1,10 @@
 from .elements import *
 from .dom import DOM
+from .events import Events
 
 __all__ = [
     # Core
-    'Element', 'DOM',
+    'Element', 'DOM', 'Events',
     # Layout & Structure
     'Div', 'Span', 'Section', 'Article', 'Main', 'Aside', 'Header', 'Footer', 'Nav',
     # Text Content

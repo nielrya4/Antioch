@@ -178,16 +178,16 @@ class Dropdown(Macro):
         self._create_menu_items(menu)
         
         container.add(dropdown_btn, menu)
-        
+
         # Add Esc key support and blur event for closing dropdown
         container.set_attribute("tabindex", "0")  # Make container focusable
-        keydown_handler = create_proxy(lambda e: self._handle_keydown(e))
+        keydown_handler = self._create_proxy(lambda e: self._handle_keydown(e))
         container.on_keydown(keydown_handler)
-        
+
         # Add blur event to close dropdown when focus is lost (clicking outside)
-        blur_handler = create_proxy(lambda e: self._handle_blur(e))
+        blur_handler = self._create_proxy(lambda e: self._handle_blur(e))
         container.on_blur(blur_handler)
-        
+
         return container
     
     def _create_menu_items(self, menu):
@@ -540,7 +540,7 @@ class Dropdown(Macro):
         container = self._get_element('container')
         if container and container._dom_element:
             # Use setTimeout to check relatedTarget after blur event completes
-            check_focus = create_proxy(lambda: self._check_focus_after_blur())
+            check_focus = self._create_proxy(lambda: self._check_focus_after_blur())
             js.setTimeout(check_focus, 10)
     
     def _check_focus_after_blur(self):
@@ -569,7 +569,7 @@ class Dropdown(Macro):
                         self._close_dropdown()
 
             # Create proxy and store reference for cleanup
-            self._click_outside_handler = create_proxy(handle_click_outside)
+            self._click_outside_handler = self._create_proxy(handle_click_outside)
             js.document.addEventListener('click', self._click_outside_handler)
 
     def _remove_click_outside_listener(self):
@@ -586,7 +586,7 @@ class Dropdown(Macro):
                     self._close_dropdown()
 
             # Create proxy and store reference for cleanup
-            self._escape_handler = create_proxy(handle_escape)
+            self._escape_handler = self._create_proxy(handle_escape)
             js.document.addEventListener('keydown', self._escape_handler)
 
     def _remove_escape_listener(self):
