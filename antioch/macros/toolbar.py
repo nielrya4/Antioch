@@ -103,9 +103,9 @@ class Toolbar(Macro):
         # Mobile breakpoint (px)
         self._mobile_breakpoint = 768
 
-        # Callback types
-        self._add_callback_type('menu_click')
-        self._add_callback_type('item_click')
+        # Create unified Events for decorator usage
+        self._create_event('menu_click')
+        self._create_event('item_click')
 
         # Default styles
         default_toolbar_style = {
@@ -439,7 +439,7 @@ class Toolbar(Macro):
         try:
             callback()
             self._toggle_mobile_menu()  # Close menu after action
-            self._trigger_callbacks('item_click', label, None)
+            self._fire_event('item_click', label, None)
         except Exception as e:
             print(f"Toolbar {self._id} mobile menu item '{label}' callback error: {e}")
 
@@ -448,7 +448,7 @@ class Toolbar(Macro):
         try:
             callback()
             self._toggle_mobile_menu()  # Close menu after action
-            self._trigger_callbacks('item_click', label, callback)
+            self._fire_event('item_click', label, callback)
         except Exception as e:
             print(f"Toolbar {self._id} mobile item '{label}' callback error: {e}")
 
@@ -632,7 +632,7 @@ class Toolbar(Macro):
         self._add_click_outside_listener()
         self._add_escape_listener()
 
-        self._trigger_callbacks('menu_click', menu_label)
+        self._fire_event('menu_click', menu_label)
 
     def _close_all_menus(self):
         """Close all open menus."""
@@ -673,7 +673,7 @@ class Toolbar(Macro):
             # Close any open menus first
             self._close_all_menus()
             callback()
-            self._trigger_callbacks('item_click', label, None)
+            self._fire_event('item_click', label, None)
         except Exception as e:
             print(f"Toolbar {self._id} menu item '{label}' callback error: {e}")
 
@@ -682,7 +682,7 @@ class Toolbar(Macro):
         try:
             callback()
             self._close_all_menus()
-            self._trigger_callbacks('item_click', label, callback)
+            self._fire_event('item_click', label, callback)
         except Exception as e:
             print(f"Toolbar {self._id} item '{label}' callback error: {e}")
 

@@ -61,10 +61,10 @@ class WebCanvas(Macro):
         self._image_cache = {}  # Dict[str, Image]
         self._pending_images = {}  # Dict[str, List[Callable]]
 
-        # Register callback types
-        self._add_callback_type('draw')
-        self._add_callback_type('clear')
-        self._add_callback_type('image_loaded')
+        # Create unified Events for decorator usage
+        self._create_event('draw')
+        self._create_event('clear')
+        self._create_event('image_loaded')
 
         # Initialize the macro (calls _create_elements)
         self._init_macro()
@@ -895,7 +895,7 @@ class WebCanvas(Macro):
                     pending_cb(self, src, img)
 
             # Trigger event
-            self._trigger_callbacks('image_loaded', src, img)
+            self._fire_event('image_loaded', src, img)
 
             # Clean up
             if src in self._pending_images:
@@ -1009,7 +1009,7 @@ class WebCanvas(Macro):
             ctx.restore()
 
         # Trigger callback
-        self._trigger_callbacks('clear')
+        self._fire_event('clear')
 
         return self
 

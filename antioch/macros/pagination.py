@@ -47,9 +47,9 @@ class Pagination(Macro):
             show_page_info=show_page_info
         )
         
-        # Add callback types
-        self._add_callback_type('page_change')
-        self._add_callback_type('items_per_page_change')
+        # Create unified Events for decorator usage
+        self._create_event('page_change')
+        self._create_event('items_per_page_change')
         
         # Default styles
         default_container_style = {
@@ -212,7 +212,7 @@ class Pagination(Macro):
         if page_num != old_page and 1 <= page_num <= self._get_state('total_pages'):
             self._set_state(current_page=page_num)
             self._update_pagination()
-            self._trigger_callbacks('page_change', page_num, old_page)
+            self._fire_event('page_change', page_num, old_page)
     
     def _update_pagination(self):
         """Update pagination display."""
@@ -230,7 +230,7 @@ class Pagination(Macro):
             old_page = self._get_state('current_page')
             self._set_state(current_page=page_num)
             self._update_pagination()
-            self._trigger_callbacks('page_change', page_num, old_page)
+            self._fire_event('page_change', page_num, old_page)
         return self
     
     def next_page(self):
@@ -292,7 +292,7 @@ class Pagination(Macro):
             )
             
             self._update_pagination()
-            self._trigger_callbacks('items_per_page_change', items_per_page, old_items_per_page)
+            self._fire_event('items_per_page_change', items_per_page, old_items_per_page)
         
         return self
     

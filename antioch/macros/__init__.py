@@ -29,12 +29,14 @@ Available Components:
 Base Classes for Creating Custom Macros:
 - Macro: Base class with common functionality (ID management, callbacks, styling)
 - SimpleMacro: Simplified base class for basic macros with just content
+- JSLibraryMacro: Base class for wrapping JavaScript libraries with automatic dependency loading
 
 All components use unique identifiers and safe event handling to ensure
 multiple instances work independently on the same page.
 """
 
 from .base import Macro, SimpleMacro
+from .js_library import JSLibraryMacro
 from .counter import Counter
 from .modal import Modal
 from .form import Form, FormField, RequiredValidator, EmailValidator, MinLengthValidator, CustomValidator
@@ -62,6 +64,7 @@ __all__ = [
     # Base classes for custom macros
     'Macro',
     'SimpleMacro',
+    'JSLibraryMacro',
 
     # Core components
     'Counter',

@@ -65,11 +65,11 @@ class Map(Macro):
         # Store references to proxied callbacks for cleanup
         self._map_callbacks = {}
 
-        # Add callback types
-        self._add_callback_type('click')
-        self._add_callback_type('zoom')
-        self._add_callback_type('move')
-        self._add_callback_type('ready')
+        # Create unified Events for decorator usage
+        self._create_event('click')
+        self._create_event('zoom')
+        self._create_event('move')
+        self._create_event('ready')
 
         # Default container style
         default_container_style = {
@@ -168,7 +168,7 @@ class Map(Macro):
             # Note: Layer control is initialized lazily when first layer is added
 
             # Trigger ready callback
-            self._trigger_callbacks('ready')
+            self._fire_event('ready')
 
         except Exception as e:
             # Initialization failed, retry
@@ -222,7 +222,7 @@ class Map(Macro):
         def handle_map_click(event):
             lat = event.latlng.lat
             lng = event.latlng.lng
-            self._trigger_callbacks('click', {'lat': lat, 'lng': lng}, event)
+            self._fire_event('click', {'lat': lat, 'lng': lng}, event)
 
         click_proxy = create_proxy(handle_map_click)
         self._map_callbacks['click'] = click_proxy
@@ -232,7 +232,7 @@ class Map(Macro):
         def handle_zoom(event):
             zoom = map_instance.getZoom()
             self._set_state(zoom=zoom)
-            self._trigger_callbacks('zoom', zoom, event)
+            self._fire_event('zoom', zoom, event)
 
         zoom_proxy = create_proxy(handle_zoom)
         self._map_callbacks['zoom'] = zoom_proxy
@@ -243,7 +243,7 @@ class Map(Macro):
             center_obj = map_instance.getCenter()
             center = [center_obj.lat, center_obj.lng]
             self._set_state(center=center)
-            self._trigger_callbacks('move', center, event)
+            self._fire_event('move', center, event)
 
         move_proxy = create_proxy(handle_move)
         self._map_callbacks['move'] = move_proxy

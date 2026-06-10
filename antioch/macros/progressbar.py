@@ -46,10 +46,10 @@ class ProgressBar(Macro):
             striped=striped
         )
         
-        # Add callback types
-        self._add_callback_type('progress_change')
-        self._add_callback_type('complete')
-        self._add_callback_type('reset')
+        # Create unified Events for decorator usage
+        self._create_event('progress_change')
+        self._create_event('complete')
+        self._create_event('reset')
         
         # Initialize the macro
         self._init_macro()
@@ -155,11 +155,11 @@ class ProgressBar(Macro):
         self._update_display()
         
         # Trigger callbacks
-        self._trigger_callbacks('progress_change', value, old_progress)
+        self._fire_event('progress_change', value, old_progress)
         
         # Check if complete
         if value >= max_progress:
-            self._trigger_callbacks('complete', value)
+            self._fire_event('complete', value)
         
         return self
     
@@ -177,7 +177,7 @@ class ProgressBar(Macro):
         """Reset progress to 0."""
         old_progress = self._get_state('progress')
         self.set_progress(0)
-        self._trigger_callbacks('reset', old_progress)
+        self._fire_event('reset', old_progress)
         return self
     
     def set_max(self, max_value):

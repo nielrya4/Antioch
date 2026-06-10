@@ -39,10 +39,10 @@ class Alert(Macro):
             visible=True
         )
         
-        # Add callback types
-        self._add_callback_type('dismiss')
-        self._add_callback_type('show')
-        self._add_callback_type('auto_dismiss')
+        # Create unified Events for decorator usage
+        self._create_event('dismiss')
+        self._create_event('show')
+        self._create_event('auto_dismiss')
         
         # Initialize the macro
         self._init_macro()
@@ -192,7 +192,7 @@ class Alert(Macro):
                 # In real implementation, would use setTimeout
                 container.style.display = "none"
             
-            self._trigger_callbacks('dismiss')
+            self._fire_event('dismiss')
         return self
     
     def show(self):
@@ -206,7 +206,7 @@ class Alert(Macro):
                 container.style.opacity = "1"
                 container.style.transform = "translateY(0)"
             
-            self._trigger_callbacks('show')
+            self._fire_event('show')
             
             # Reset auto-dismiss if enabled
             if self._get_state('auto_dismiss'):

@@ -5,6 +5,8 @@ Provides common functionality for ID management, styling, callbacks, and element
 import uuid
 from typing import Dict, Any, List, Callable, Optional, Union
 from ..elements import Div
+from ..event import Event
+from ..event_registry import EventRegistry
 from pyodide.ffi import create_proxy
 
 
@@ -38,15 +40,18 @@ class Macro:
         
         # Callback management
         self._callbacks: Dict[str, List[Callable]] = {}
-        
+
+        # Event management (unified event system)
+        self.events = EventRegistry(owner=self)
+
         # Element references
         self._elements: Dict[str, Any] = {}
         self._root_element: Optional[Any] = None
-        
+
         # Style management
         self._default_styles = {}
         self._user_styles = {}
-        
+
         # State management
         self._state = {}
         self._destroyed = False
@@ -251,7 +256,78 @@ class Macro:
                 except ValueError:
                     pass  # Callback wasn't in the list
         return self
-    
+
+    # ========== Unified Event System ==========
+
+    def _create_event(self, event_name: str) -> Event:
+        """
+        Create a new Event object for this macro.
+
+        This creates a unified Event that can be used with the @when decorator
+        or subscribed to directly. The event is automatically wired to trigger
+        the existing callback system for backwards compatibility.
+
+        Args:
+            event_name: Name of the event (e.g., 'click', 'close', 'change')
+
+        Returns:
+            Event object that can be accessed via self.events
+
+        Example:
+            # In macro __init__:
+            self._create_event('close')
+
+            # Usage:
+            @when(modal.events.close)
+            def handle_close(sender, args):
+                print("Modal closed")
+        """
+        # Register the event in the EventRegistry
+        event = self.events.register(event_name)
+
+        # Wire the Event to the callback system for backwards compatibility
+        # When the Event fires, it also triggers the old callback system
+        def bridge_to_callbacks(sender, *args, **kwargs):
+            self._trigger_callbacks(event_name, *args, **kwargs)
+
+        event.subscribe(bridge_to_callbacks)
+
+        self._add_callback_type(event_name)
+
+        return event
+
+    def _get_event(self, event_name: str) -> Optional[Event]:
+        """
+        Get an existing Event object by name.
+
+        Args:
+            event_name: Name of the event
+
+        Returns:
+            Event object or None if not found
+        """
+        return self.events.get(event_name)
+
+    def _fire_event(self, event_name: str, *args, **kwargs):
+        """
+        Fire an event by name.
+
+        This fires both the unified Event (if created) and the legacy callback system.
+
+        Args:
+            event_name: Name of the event to fire
+            *args: Arguments to pass to handlers
+            **kwargs: Keyword arguments to pass to handlers
+        """
+        # Fire unified event if it exists
+        if event_name in self.events:
+            self.events.fire(event_name, *args, **kwargs)
+        else:
+            # Fall back to legacy callback system
+            self._trigger_callbacks(event_name, *args, **kwargs)
+
+    # ========== Container and Display Methods ==========
+
     def _create_container(self, container_styles: Optional[Dict[str, Any]] = None) -> Div:
         """
         Create a standard container div with default macro styling.

@@ -70,10 +70,10 @@ class Accordion(Macro):
             default_expanded=default_expanded
         )
         
-        # Add callback types
-        self._add_callback_type('panel_expand')
-        self._add_callback_type('panel_collapse')
-        self._add_callback_type('change')
+        # Create unified Events for decorator usage
+        self._create_event('panel_expand')
+        self._create_event('panel_collapse')
+        self._create_event('change')
         
         # Default styles
         default_container_style = {
@@ -241,8 +241,8 @@ class Accordion(Macro):
             panel.icon_element.style.transform = "rotate(0deg)"
 
         # Trigger callbacks
-        self._trigger_callbacks('panel_expand', panel)
-        self._trigger_callbacks('change', panel, 'expand')
+        self._fire_event('panel_expand', panel)
+        self._fire_event('change', panel, 'expand')
     
     def _collapse_panel(self, panel, trigger_callbacks=True):
         """Collapse a panel."""
@@ -261,8 +261,8 @@ class Accordion(Macro):
 
         # Trigger callbacks
         if trigger_callbacks:
-            self._trigger_callbacks('panel_collapse', panel)
-            self._trigger_callbacks('change', panel, 'collapse')
+            self._fire_event('panel_collapse', panel)
+            self._fire_event('change', panel, 'collapse')
     
     def _set_default_expanded(self):
         """Set default expanded panels."""

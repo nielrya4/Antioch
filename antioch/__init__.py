@@ -1,10 +1,14 @@
 from .elements import *
 from .dom import DOM
 from .events import Events
+from .event import Event, when, EventGroup
+from .event_registry import EventRegistry
 
 __all__ = [
     # Core
     'Element', 'DOM', 'Events',
+    # Unified Event System
+    'Event', 'when', 'EventGroup', 'EventRegistry',
     # Layout & Structure
     'Div', 'Span', 'Section', 'Article', 'Main', 'Aside', 'Header', 'Footer', 'Nav',
     # Text Content

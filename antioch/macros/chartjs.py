@@ -3,16 +3,11 @@ Chart.js wrapper macro for Antioch framework.
 Provides full access to Chart.js API with Python convenience.
 """
 import js
-from pyodide.ffi import create_proxy, to_js
-from .base import Macro
-from ..elements import Div, Canvas
-from ..lib.loader import inject_script
-
-# Ensure Chart.js is loaded when this module is imported
-inject_script('antioch/lib/vendor/chart.min.js')
+from .js_library import JSLibraryMacro
+from ..elements import Canvas
 
 
-class ChartJS(Macro):
+class ChartJS(JSLibraryMacro):
     """
     Chart.js wrapper component.
 
@@ -45,7 +40,7 @@ class ChartJS(Macro):
         }
 
         chart = ChartJS(config, width=600, height=400)
-        DOM.add(chart)
+        DOM.add(chart.element)
     """
 
     def __init__(self, config, width=600, height=400, container_style=None, **kwargs):
@@ -58,24 +53,22 @@ class ChartJS(Macro):
             width: Canvas width in pixels (or CSS string like "100%")
             height: Canvas height in pixels (or CSS string)
             container_style: Custom container styles
-            **kwargs: Additional Macro base class arguments
+            **kwargs: Additional JSLibraryMacro arguments
         """
-        super().__init__(macro_type="chartjs", **kwargs)
-
         # Validate config
         if not isinstance(config, dict):
             raise ValueError("config must be a dictionary")
         if 'type' not in config:
             raise ValueError("config must include 'type' (e.g., 'bar', 'line', 'pie')")
 
+        # Initialize base class
+        super().__init__(macro_type="chartjs", **kwargs)
+
         # Set up state
         self._set_state(
             config=config,
             width=width,
-            height=height,
-            chart_instance=None,
-            initialized=False,
-            init_retry_count=0
+            height=height
         )
 
         # Default container style
@@ -87,13 +80,25 @@ class ChartJS(Macro):
 
         self._container_style = self._merge_styles(default_container_style, container_style)
 
-        # Callback types
-        self._add_callback_type('ready')
-        self._add_callback_type('click')
-        self._add_callback_type('hover')
+        # Create unified Events for decorator usage
+        self._create_event('click')
+        self._create_event('hover')
 
         # Initialize macro
         self._init_macro()
+
+    # ========== Required JSLibraryMacro Methods ==========
+
+    def _get_library_dependencies(self):
+        """Specify Chart.js library to load."""
+        return {
+            'scripts': ['antioch/lib/vendor/chart.min.js'],
+            'stylesheets': []
+        }
+
+    def _get_library_global_name(self):
+        """Chart.js exposes the 'Chart' global."""
+        return 'Chart'
 
     def _create_elements(self):
         """Create canvas element and container."""
@@ -118,60 +123,22 @@ class ChartJS(Macro):
         canvas.set_attribute("id", f"canvas_{self._id}")
 
         container.add(canvas)
-
-        # Initialize Chart.js after DOM ready
-        init_proxy = create_proxy(lambda: self._initialize_chart())
-        js.setTimeout(init_proxy, 100)
-
         return container
 
-    def _initialize_chart(self):
-        """Initialize Chart.js instance with retry mechanism."""
-        if self._get_state('initialized'):
-            return
+    def _create_js_instance(self):
+        """Create Chart.js instance."""
+        canvas = self._get_element('canvas')
+        config = self._to_js(self._get_state('config'))
 
-        retry_count = self._get_state('init_retry_count')
-        if retry_count > 50:  # Max 50 retries (5 seconds)
-            print(f"Chart.js initialization failed after {retry_count} attempts")
-            print("Make sure Chart.js is loaded in the HTML page")
-            return
+        # Create Chart.js instance
+        return js.Chart.new(canvas._dom_element, config)
 
-        try:
-            # Check if Chart.js is loaded
-            if not hasattr(js, 'Chart') or not js.Chart:
-                # Not loaded yet, retry
-                self._set_state(init_retry_count=retry_count + 1)
-                init_proxy = create_proxy(lambda: self._initialize_chart())
-                js.setTimeout(init_proxy, 100)
-                return
+    def _cleanup_js_instance(self):
+        """Clean up Chart.js instance."""
+        if self.js_instance:
+            self.js_instance.destroy()
 
-            canvas = self._get_element('canvas')
-            if not canvas or not canvas._dom_element:
-                # Canvas not ready
-                self._set_state(init_retry_count=retry_count + 1)
-                init_proxy = create_proxy(lambda: self._initialize_chart())
-                js.setTimeout(init_proxy, 100)
-                return
-
-            # Convert Python config to JavaScript object
-            config = self._get_state('config')
-            js_config = to_js(config, dict_converter=js.Object.fromEntries)
-
-            # Create Chart.js instance
-            chart_instance = js.Chart.new(canvas._dom_element, js_config)
-
-            # Store instance
-            self._set_state(chart_instance=chart_instance, initialized=True)
-
-            # Trigger ready callback
-            self._trigger_callbacks('ready', self)
-
-        except Exception as e:
-            print(f"Chart.js initialization error: {e}")
-            # Retry with longer delay on error
-            self._set_state(init_retry_count=retry_count + 1)
-            init_proxy = create_proxy(lambda: self._initialize_chart())
-            js.setTimeout(init_proxy, 200)
+    # ========== Public API Methods ==========
 
     def update(self, config=None, mode='default'):
         """
@@ -185,48 +152,66 @@ class ChartJS(Macro):
         Returns:
             Self for method chaining
         """
-        chart = self._get_state('chart_instance')
-        if not chart:
-            print("Chart not initialized yet")
-            return self
+        self.ensure_initialized()
 
         if config:
             # Update config in state
             self._set_state(config=config)
-            js_config = to_js(config, dict_converter=js.Object.fromEntries)
+            js_config = self._to_js(config)
 
             # Update chart data and options
             if hasattr(js_config, 'data'):
-                chart.data = js_config.data
+                self.js_instance.data = js_config.data
             if hasattr(js_config, 'options'):
-                chart.options = js_config.options
+                self.js_instance.options = js_config.options
             if hasattr(js_config, 'type'):
-                chart.config.type = js_config.type
+                self.js_instance.config.type = js_config.type
 
         # Trigger Chart.js update
-        chart.update(mode)
+        self.js_instance.update(mode)
         return self
 
-    def destroy(self):
-        """Destroy chart instance and clean up."""
-        chart = self._get_state('chart_instance')
-        if chart:
-            chart.destroy()
-            self._set_state(chart_instance=None, initialized=False)
-
-        super().destroy()
-
-    def on_ready(self, callback):
+    def update_data(self, new_data):
         """
-        Register callback for when chart is ready.
+        Update only the chart data.
 
         Args:
-            callback: Function to call when chart is initialized
+            new_data: New data object for the chart
 
         Returns:
             Self for method chaining
         """
-        return self.on('ready', callback)
+        self.ensure_initialized()
+
+        config = self._get_state('config')
+        config['data'] = new_data
+        self._set_state(config=config)
+
+        self.js_instance.data = self._to_js(new_data)
+        self.js_instance.update()
+        return self
+
+    def set_type(self, chart_type):
+        """
+        Change the chart type.
+
+        Args:
+            chart_type: New chart type ('bar', 'line', 'pie', etc.)
+
+        Returns:
+            Self for method chaining
+        """
+        self.ensure_initialized()
+
+        config = self._get_state('config')
+        config['type'] = chart_type
+        self._set_state(config=config)
+
+        self.js_instance.config.type = chart_type
+        self.js_instance.update()
+        return self
+
+    # ========== Convenience Properties ==========
 
     @property
     def chart(self):
@@ -236,15 +221,14 @@ class ChartJS(Macro):
         Returns:
             JavaScript Chart.js object or None if not initialized
         """
-        return self._get_state('chart_instance')
+        return self.js_instance
 
     @property
     def is_ready(self):
         """Check if chart is initialized."""
-        return self._get_state('initialized')
+        return self.is_initialized
 
     @property
     def config(self):
         """Get current chart configuration."""
         return self._get_state('config')
-

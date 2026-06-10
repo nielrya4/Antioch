@@ -1,13 +1,23 @@
 import js
 from typing import Union, Optional
 from .elements import Element
+from .event_registry import EventRegistry
 
 
 class DOMHelper:
-    """Helper class for DOM manipulation operations."""
+    """Helper class for DOM manipulation operations and global events."""
 
     def __init__(self):
         self._document = js.document
+
+        # Global application events registry
+        self.events = EventRegistry(owner=self)
+
+        # Register common global events
+        self.events.register('app_ready')
+        self.events.register('app_error')
+        self.events.register('page_load')
+        self.events.register('page_unload')
     
     def add(self, *items, target: Optional[Union[Element, str]] = None) -> 'DOMHelper':
         """

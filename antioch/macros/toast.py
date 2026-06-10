@@ -42,9 +42,9 @@ class Toast(Macro):
             start_time=None
         )
         
-        # Add callback types
-        self._add_callback_type('close')
-        self._add_callback_type('click')
+        # Create unified Events for decorator usage
+        self._create_event('close')
+        self._create_event('click')
         
         # Initialize macro
         self._init_macro()
@@ -220,7 +220,7 @@ class Toast(Macro):
         # Only trigger if not clicking the close button
         close_btn = self._get_element('close_btn')
         if close_btn and event.target != close_btn._dom_element:
-            self._trigger_callbacks('click')
+            self._fire_event('click')
     
     def _start_auto_dismiss(self):
         """Start auto-dismiss timer (simulation)."""
@@ -245,7 +245,7 @@ class Toast(Macro):
                 # In real implementation, would use setTimeout
                 container.style.display = "none"
             
-            self._trigger_callbacks('close')
+            self._fire_event('close')
         
         return self
     

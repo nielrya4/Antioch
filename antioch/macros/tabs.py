@@ -44,9 +44,9 @@ class Tabs(Macro):
             initial_active_tab=active_tab,
         )
 
-        self._add_callback_type("change")
-        self._add_callback_type("tab_added")
-        self._add_callback_type("tab_removed")
+        self._create_event("change")
+        self._create_event("tab_added")
+        self._create_event("tab_removed")
 
         default_container_style = {
             "border": "1px solid #ddd",
@@ -253,7 +253,7 @@ class Tabs(Macro):
         if len(tabs) == 1:
             self.set_active_tab(tab.tab_id)
 
-        self._trigger_callbacks("tab_added", tab)
+        self._fire_event("tab_added", tab)
         return self
 
     def remove_tab(self, tab_id):
@@ -274,7 +274,7 @@ class Tabs(Macro):
                 self._get_element("content_container")._dom_element.innerHTML = ""
                 self._set_state(active_tab_id=None)
 
-        self._trigger_callbacks("tab_removed", tab)
+        self._fire_event("tab_removed", tab)
         return self
 
     def set_active_tab(self, tab_id):
@@ -306,7 +306,7 @@ class Tabs(Macro):
                     tab.content.ensure_initialized()
 
         if old_id != tab_id:
-            self._trigger_callbacks("change", tab, old_id)
+            self._fire_event("change", tab, old_id)
 
         return self
 

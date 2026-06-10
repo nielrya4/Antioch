@@ -51,11 +51,11 @@ class Slider(Macro):
             orientation=orientation
         )
         
-        # Add callback types
-        self._add_callback_type('change')
-        self._add_callback_type('input')  # Continuous updates while sliding
-        self._add_callback_type('start')  # Start of slide
-        self._add_callback_type('end')    # End of slide
+        # Create unified Events for decorator usage
+        self._create_event('change')
+        self._create_event('input')  # Continuous updates while sliding
+        self._create_event('start')  # Start of slide
+        self._create_event('end')    # End of slide
         
         # Default styles
         default_container_style = {
@@ -289,22 +289,22 @@ class Slider(Macro):
         self._update_display()
         self._update_track_gradient()
         
-        self._trigger_callbacks('input', new_value, old_value)
+        self._fire_event('input', new_value, old_value)
     
     def _handle_change(self, event):
         """Handle change event (final value)."""
         new_value = float(event.target.value)
         old_value = self._get_state('value')
         
-        self._trigger_callbacks('change', new_value, old_value)
+        self._fire_event('change', new_value, old_value)
     
     def _handle_start(self, event):
         """Handle start of sliding."""
-        self._trigger_callbacks('start', self._get_state('value'))
+        self._fire_event('start', self._get_state('value'))
     
     def _handle_end(self, event):
         """Handle end of sliding."""
-        self._trigger_callbacks('end', self._get_state('value'))
+        self._fire_event('end', self._get_state('value'))
     
     def _update_display(self):
         """Update value display."""

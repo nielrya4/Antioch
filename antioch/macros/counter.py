@@ -36,8 +36,8 @@ class Counter(Macro):
             label=label
         )
         
-        # Add callback types
-        self._add_callback_type('change')
+        # Create unified Event for decorator usage
+        self._create_event('change')
         
         # Store initial value for reset functionality
         self._initial_value = initial_value
@@ -129,7 +129,7 @@ class Counter(Macro):
         if max_value is None or new_value <= max_value:
             self._set_state(value=new_value)
             self._update_display()
-            self._trigger_callbacks('change', new_value, current_value)
+            self._fire_event('change', new_value, current_value)
     
     def _decrement(self, event=None):
         """Handle decrement button click."""
@@ -141,7 +141,7 @@ class Counter(Macro):
         if min_value is None or new_value >= min_value:
             self._set_state(value=new_value)
             self._update_display()
-            self._trigger_callbacks('change', new_value, current_value)
+            self._fire_event('change', new_value, current_value)
     
     def _update_display(self):
         """Update the counter display and button states."""

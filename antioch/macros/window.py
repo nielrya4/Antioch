@@ -49,12 +49,12 @@ class Window(Macro):
             saved_state=None  # For restore from min/max
         )
 
-        # Add callback types
-        self._add_callback_type('close')
-        self._add_callback_type('minimize')
-        self._add_callback_type('maximize')
-        self._add_callback_type('restore')
-        self._add_callback_type('focus')
+        # Create unified Events for decorator usage
+        self._create_event('close')
+        self._create_event('minimize')
+        self._create_event('maximize')
+        self._create_event('restore')
+        self._create_event('focus')
 
         # Default container style
         default_container_style = {
@@ -250,7 +250,7 @@ class Window(Macro):
     def focus(self):
         """Bring window to front."""
         # This will be handled by WindowManager
-        self._trigger_callbacks('focus')
+        self._fire_event('focus')
         return self
 
     def minimize(self):
@@ -272,7 +272,7 @@ class Window(Macro):
             if self._root_element:
                 self._root_element._dom_element.style.visibility = "hidden"
 
-            self._trigger_callbacks('minimize')
+            self._fire_event('minimize')
 
         return self
 
@@ -297,7 +297,7 @@ class Window(Macro):
 
             # Update DOM
             self._update_position_and_size()
-            self._trigger_callbacks('maximize')
+            self._fire_event('maximize')
 
         return self
 
@@ -319,13 +319,13 @@ class Window(Macro):
             if self._root_element:
                 self._root_element._dom_element.style.visibility = "visible"
             self._update_position_and_size()
-            self._trigger_callbacks('restore')
+            self._fire_event('restore')
 
         return self
 
     def close(self):
         """Close the window."""
-        self._trigger_callbacks('close')
+        self._fire_event('close')
         return self
 
     def _update_position_and_size(self):

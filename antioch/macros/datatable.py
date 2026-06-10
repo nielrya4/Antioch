@@ -1,30 +1,17 @@
 """
-DataTable macro - Interactive table component powered by Tabulator.
+DataTable macro - Interactive table component with inline editing.
 
-Provides powerful spreadsheet-like tables with:
-- Sorting, filtering, and pagination
-- Inline editing
-- Row selection
-- Column formatting
-- Data export (CSV, JSON, etc.)
-- And much more from Tabulator
-
-Documentation: https://tabulator.info/docs/6.2
+Built with native Antioch elements for clean, warning-free operation.
+Supports inline editing, row operations, and data export.
 """
 import js
-from pyodide.ffi import create_proxy, to_js
 from .base import Macro
-from ..elements import Div
-from ..lib.loader import inject_script, inject_stylesheet
-
-# Ensure Tabulator is loaded when this module is imported
-inject_stylesheet('antioch/lib/vendor/tabulator.min.css')
-inject_script('antioch/lib/vendor/tabulator.min.js')
+from ..elements import Div, Table, Th, Tr, Td, Input, Button, Span
 
 
 class DataTable(Macro):
     """
-    DataTable macro powered by Tabulator.
+    Native data table component with inline editing capabilities.
 
     Usage:
         table = DataTable(
@@ -33,215 +20,386 @@ class DataTable(Macro):
                 {"name": "Bob", "age": 25, "city": "SF"}
             ],
             columns=[
-                {"title": "Name", "field": "name", "editor": "input"},
-                {"title": "Age", "field": "age", "editor": "number"},
+                {"title": "Name", "field": "name"},
+                {"title": "Age", "field": "age"},
                 {"title": "City", "field": "city"}
             ],
-            height="400px",
-            layout="fitColumns"
+            editable=True,
+            height="400px"
         )
-
-        # Access native Tabulator for advanced features
-        table.tabulator.setData(new_data)
     """
 
-    def __init__(self, data=None, columns=None, options=None,
-                 height="400px", layout="fitData", container_style=None, **kwargs):
+    def __init__(self, data=None, columns=None, editable=True,
+                 height="400px", show_row_numbers=True,
+                 container_style=None, **kwargs):
         """
-        Initialize DataTable with Tabulator.
+        Initialize DataTable.
 
         Args:
             data: List of dictionaries representing table rows
-            columns: List of column definitions (Tabulator format)
-                    See: https://tabulator.info/docs/6.2/columns
-            options: Additional Tabulator options dict
-            height: Table height (CSS string or pixels)
-            layout: Column layout mode ("fitData", "fitColumns", "fitDataFill", etc.)
+            columns: List of column definitions with 'title' and 'field' keys
+            editable: Whether cells are editable (default: True)
+            height: Table height (CSS string)
+            show_row_numbers: Show row number column (default: True)
             container_style: Custom container styles
-            **kwargs: Additional Macro base class arguments
+            **kwargs: Additional Macro arguments
         """
+        # Initialize base class
         super().__init__(macro_type="datatable", **kwargs)
+
+        # Process columns
+        if columns is None:
+            columns = []
+        self._column_fields = [col.get('field', f'col_{i}') for i, col in enumerate(columns)]
+
+        # Process data
+        if data is None:
+            data = []
+        processed_data = self._process_data(data)
 
         # Set up state
         self._set_state(
-            data=data or [],
-            columns=columns or [],
-            options=options or {},
+            data=processed_data,
+            columns=columns,
+            editable=editable,
             height=height,
-            layout=layout,
-            table_instance=None,
-            initialized=False,
-            init_retry_count=0
+            show_row_numbers=show_row_numbers
         )
 
         # Default container style
         default_container_style = {
             "width": "100%",
-            "max_width": "100%",
-            "position": "relative",
-            "overflow": "auto"
+            "max-width": "100%",
+            "overflow": "auto",
+            "border": "1px solid #ddd",
+            "border-radius": "4px",
+            "background-color": "white"
         }
 
         self._container_style = self._merge_styles(default_container_style, container_style)
 
-        # Callback types
-        self._add_callback_type('ready')
-        self._add_callback_type('rowClick')
-        self._add_callback_type('cellEdited')
-        self._add_callback_type('dataChanged')
+        # Create unified Events for decorator usage
+        self._create_event('cell_change')
+        self._create_event('row_add')
+        self._create_event('row_delete')
+        self._create_event('data_change')
+        self._create_event('rowClick')
 
         # Initialize macro
         self._init_macro()
 
+    def _process_data(self, data):
+        """Convert data to list of lists format."""
+        if not data:
+            return []
+
+        # Convert list of dicts to list of lists
+        if isinstance(data[0], dict):
+            return [[row.get(field, "") for field in self._column_fields] for row in data]
+
+        # Already list of lists
+        return [list(row) for row in data]
+
     def _create_elements(self):
-        """Create table container element."""
-        # Create container div
-        container = self._register_element('container',
-                                          self._create_container(self._container_style))
+        """Create the table UI elements."""
+        # Container
+        container = self._create_container(self._container_style)
 
-        # Initialize Tabulator after DOM ready
-        init_proxy = create_proxy(lambda: self._initialize_table())
-        js.setTimeout(init_proxy, 100)
+        # Table wrapper with fixed height
+        table_wrapper = Div(style={
+            "height": self._get_state('height'),
+            "overflow-y": "auto",
+            "overflow-x": "auto"
+        })
 
+        # Table
+        table = self._register_element('table', Table(style={
+            "width": "100%",
+            "border-collapse": "collapse",
+            "font-family": "Arial, sans-serif",
+            "font-size": "14px"
+        }))
+
+        # Create header
+        self._create_header(table)
+
+        # Create body
+        self._create_body(table)
+
+        table_wrapper.add(table)
+
+        # Controls
+        controls = self._create_controls()
+
+        container.add(table_wrapper, controls)
         return container
 
-    def _initialize_table(self):
-        """Initialize Tabulator instance with retry mechanism."""
-        if self._get_state('initialized'):
-            return
+    def _create_header(self, table):
+        """Create table header."""
+        columns = self._get_state('columns')
+        show_row_numbers = self._get_state('show_row_numbers')
 
-        retry_count = self._get_state('init_retry_count')
-        if retry_count > 50:  # Max 50 retries (5 seconds)
-            print(f"Tabulator initialization failed after {retry_count} attempts")
-            print("Make sure Tabulator is loaded")
-            return
+        header_row = Tr()
 
-        try:
-            # Check if Tabulator is loaded
-            if not hasattr(js, 'Tabulator') or not js.Tabulator:
-                # Not loaded yet, retry
-                self._set_state(init_retry_count=retry_count + 1)
-                init_proxy = create_proxy(lambda: self._initialize_table())
-                js.setTimeout(init_proxy, 100)
-                return
+        # Row number column
+        if show_row_numbers:
+            header_row.add(Th("#", style={
+                "background-color": "#f8f9fa",
+                "border": "1px solid #ddd",
+                "padding": "8px",
+                "font-weight": "bold",
+                "text-align": "center",
+                "width": "50px",
+                "position": "sticky",
+                "top": "0",
+                "z-index": "10"
+            }))
 
-            container = self._get_element('container')
-            if not container or not container._dom_element:
-                # Container not ready
-                self._set_state(init_retry_count=retry_count + 1)
-                init_proxy = create_proxy(lambda: self._initialize_table())
-                js.setTimeout(init_proxy, 100)
-                return
+        # Data columns
+        for col in columns:
+            th = Th(col.get('title', ''), style={
+                "background-color": "#f8f9fa",
+                "border": "1px solid #ddd",
+                "padding": "8px",
+                "font-weight": "bold",
+                "text-align": "left",
+                "min-width": "100px",
+                "position": "sticky",
+                "top": "0",
+                "z-index": "10"
+            })
+            header_row.add(th)
 
-            # Build Tabulator configuration
-            config = {
-                'data': self._get_state('data'),
-                'columns': self._get_state('columns'),
-                'height': self._get_state('height'),
-                'layout': self._get_state('layout')
-            }
+        # Actions column
+        header_row.add(Th("Actions", style={
+            "background-color": "#f8f9fa",
+            "border": "1px solid #ddd",
+            "padding": "8px",
+            "font-weight": "bold",
+            "text-align": "center",
+            "width": "80px",
+            "position": "sticky",
+            "top": "0",
+            "z-index": "10"
+        }))
 
-            # Merge with additional options
-            config.update(self._get_state('options'))
+        table.add(header_row)
 
-            # Convert Python config to JavaScript object
-            js_config = to_js(config, dict_converter=js.Object.fromEntries)
+    def _create_body(self, table):
+        """Create table body with data rows."""
+        data = self._get_state('data')
+        show_row_numbers = self._get_state('show_row_numbers')
+        editable = self._get_state('editable')
 
-            # Create Tabulator instance
-            table_instance = js.Tabulator.new(container._dom_element, js_config)
+        for row_idx, row_data in enumerate(data):
+            tr = Tr()
+            tr.set_attribute("data-row-index", str(row_idx))
 
-            # Store instance
-            self._set_state(table_instance=table_instance, initialized=True)
+            # Add click handler for entire row
+            tr.on_click(self._create_proxy(lambda e, idx=row_idx: self._handle_row_click(idx)))
 
-            # Trigger ready callback
-            self._trigger_callbacks('ready', self)
+            # Row number
+            if show_row_numbers:
+                tr.add(Td(str(row_idx + 1), style={
+                    "border": "1px solid #ddd",
+                    "padding": "8px",
+                    "text-align": "center",
+                    "background-color": "#f8f9fa",
+                    "font-weight": "bold"
+                }))
 
-        except Exception as e:
-            print(f"Tabulator initialization error: {e}")
-            # Retry with longer delay on error
-            self._set_state(init_retry_count=retry_count + 1)
-            init_proxy = create_proxy(lambda: self._initialize_table())
-            js.setTimeout(init_proxy, 200)
+            # Data cells
+            for col_idx, cell_value in enumerate(row_data):
+                td = self._create_cell(row_idx, col_idx, cell_value, editable)
+                tr.add(td)
 
-    def set_columns(self, columns):
+            # Actions cell
+            actions_td = Td(style={
+                "border": "1px solid #ddd",
+                "padding": "4px",
+                "text-align": "center"
+            })
+
+            delete_btn = Button("×", style={
+                "background-color": "#dc3545",
+                "color": "white",
+                "border": "none",
+                "border-radius": "3px",
+                "padding": "4px 8px",
+                "cursor": "pointer",
+                "font-size": "16px",
+                "font-weight": "bold"
+            })
+            delete_btn.on_click(self._create_proxy(lambda e, idx=row_idx: self._delete_row_handler(e, idx)))
+            actions_td.add(delete_btn)
+            tr.add(actions_td)
+
+            table.add(tr)
+
+    def _create_cell(self, row_idx, col_idx, value, editable):
+        """Create a table cell with optional editing."""
+        td = Td(style={
+            "border": "1px solid #ddd",
+            "padding": "0",
+            "position": "relative"
+        })
+
+        if editable:
+            input_elem = Input("text", style={
+                "width": "100%",
+                "border": "none",
+                "padding": "8px",
+                "background": "transparent",
+                "font-family": "inherit",
+                "font-size": "inherit"
+            })
+            input_elem.value = str(value) if value is not None else ""
+            input_elem.set_attribute("data-row", str(row_idx))
+            input_elem.set_attribute("data-col", str(col_idx))
+
+            # Handle cell changes with proxies
+            input_elem.on_blur(self._create_proxy(self._handle_cell_change))
+            input_elem.on_keydown(self._create_proxy(self._handle_cell_keypress))
+
+            td.add(input_elem)
+        else:
+            td.add(Span(str(value) if value is not None else "", style={
+                "padding": "8px",
+                "display": "block"
+            }))
+
+        return td
+
+    def _handle_row_click(self, row_idx):
+        """Handle row click."""
+        data = self._get_state('data')
+        if row_idx < len(data):
+            row_data = self._get_row_as_dict(row_idx)
+            self._fire_event('rowClick', row_data)
+
+    def _handle_cell_change(self, event):
+        """Handle cell value change."""
+        input_elem = event.target
+        row_idx = int(input_elem.getAttribute("data-row"))
+        col_idx = int(input_elem.getAttribute("data-col"))
+        new_value = input_elem.value
+
+        # Update data
+        data = self._get_state('data')
+        if row_idx < len(data) and col_idx < len(data[row_idx]):
+            old_value = data[row_idx][col_idx]
+            data[row_idx][col_idx] = new_value
+            self._set_state(data=data)
+
+            # Trigger callbacks
+            self._fire_event('cell_change', self, row_idx, col_idx, new_value, old_value)
+            self._fire_event('data_change', self, self.get_data())
+
+    def _handle_cell_keypress(self, event):
+        """Handle keypress in cell (Enter to confirm)."""
+        if event.key == "Enter":
+            event.target.blur()
+
+    def _delete_row_handler(self, event, row_idx):
+        """Handle delete button click."""
+        # Stop propagation to prevent row click
+        event.stopPropagation()
+        self.delete_row(row_idx)
+
+    def _create_controls(self):
+        """Create table controls."""
+        controls = Div(style={
+            "padding": "10px",
+            "border-top": "1px solid #ddd",
+            "background-color": "#f8f9fa",
+            "display": "flex",
+            "gap": "10px",
+            "align-items": "center"
+        })
+
+        add_row_btn = Button("Add Row", style={
+            "background-color": "#007bff",
+            "color": "white",
+            "border": "none",
+            "padding": "6px 12px",
+            "border-radius": "4px",
+            "cursor": "pointer",
+            "font-size": "14px"
+        })
+        add_row_btn.on_click(self._create_proxy(lambda e: self.add_row()))
+
+        clear_btn = Button("Clear Data", style={
+            "background-color": "#6c757d",
+            "color": "white",
+            "border": "none",
+            "padding": "6px 12px",
+            "border-radius": "4px",
+            "cursor": "pointer",
+            "font-size": "14px"
+        })
+        clear_btn.on_click(self._create_proxy(lambda e: self.clear_data()))
+
+        export_csv_btn = Button("Export CSV", style={
+            "background-color": "#28a745",
+            "color": "white",
+            "border": "none",
+            "padding": "6px 12px",
+            "border-radius": "4px",
+            "cursor": "pointer",
+            "font-size": "14px"
+        })
+        export_csv_btn.on_click(self._create_proxy(lambda e: self.download("csv", "data")))
+
+        export_json_btn = Button("Export JSON", style={
+            "background-color": "#17a2b8",
+            "color": "white",
+            "border": "none",
+            "padding": "6px 12px",
+            "border-radius": "4px",
+            "cursor": "pointer",
+            "font-size": "14px"
+        })
+        export_json_btn.on_click(self._create_proxy(lambda e: self.download("json", "data")))
+
+        controls.add(add_row_btn, clear_btn, export_csv_btn, export_json_btn)
+        return controls
+
+    # ========== Public API Methods ==========
+
+    def add_row(self, data=None, position="bottom"):
         """
-        Set table columns.
+        Add a new row to the table.
 
         Args:
-            columns: List of column definitions (Tabulator format)
+            data: Row data dict or list (None for empty row)
+            position: "top" or "bottom"
 
         Returns:
             Self for method chaining
         """
-        self._set_state(columns=columns)
+        current_data = self._get_state('data')
 
-        table = self._get_state('table_instance')
-        if table:
-            table.setColumns(to_js(columns))
+        if data is None:
+            new_row = [""] * len(self._column_fields)
+        elif isinstance(data, dict):
+            new_row = [data.get(field, "") for field in self._column_fields]
+        else:
+            new_row = list(data)
 
-        return self
+        # Ensure correct length
+        while len(new_row) < len(self._column_fields):
+            new_row.append("")
 
-    def set_data(self, data):
-        """
-        Set table data.
+        if position == "top":
+            current_data.insert(0, new_row)
+        else:
+            current_data.append(new_row)
 
-        Args:
-            data: List of dictionaries representing rows
+        self._set_state(data=current_data)
+        self._rebuild_table()
 
-        Returns:
-            Self for method chaining
-        """
-        self._set_state(data=data)
-
-        table = self._get_state('table_instance')
-        if table:
-            table.setData(to_js(data))
-
-        return self
-
-    def get_data(self):
-        """
-        Get current table data.
-
-        Returns:
-            List of row data dictionaries
-        """
-        table = self._get_state('table_instance')
-        if table:
-            # Convert JS array to Python list
-            js_data = table.getData()
-            return js_data.to_py()
-        return self._get_state('data')
-
-    def clear_data(self):
-        """Clear all table data."""
-        table = self._get_state('table_instance')
-        if table:
-            table.clearData()
-        self._set_state(data=[])
-        return self
-
-    def add_row(self, data, position=None, index=None):
-        """
-        Add a row to the table.
-
-        Args:
-            data: Row data dictionary
-            position: "top" or "bottom" (default: bottom)
-            index: Specific index to insert at
-
-        Returns:
-            Self for method chaining
-        """
-        table = self._get_state('table_instance')
-        if table:
-            js_data = to_js(data)
-            if position:
-                table.addRow(js_data, position)
-            elif index is not None:
-                table.addRow(js_data, index)
-            else:
-                table.addRow(js_data)
+        self._fire_event('row_add', self, new_row)
+        self._trigger_callbacks('data_change', self, self.get_data())
         return self
 
     def delete_row(self, row_index):
@@ -254,29 +412,55 @@ class DataTable(Macro):
         Returns:
             Self for method chaining
         """
-        table = self._get_state('table_instance')
-        if table:
-            rows = table.getRows()
-            if 0 <= row_index < rows.length:
-                rows[row_index].delete()
+        current_data = self._get_state('data')
+        if 0 <= row_index < len(current_data):
+            deleted_row = current_data.pop(row_index)
+            self._set_state(data=current_data)
+            self._rebuild_table()
+
+            self._fire_event('row_delete', self, row_index, deleted_row)
+            self._fire_event('data_change', self, self.get_data())
         return self
 
-    def update_row(self, row_index, data):
+    def set_data(self, data):
         """
-        Update a row by index.
+        Set table data.
 
         Args:
-            row_index: Index of row to update
-            data: New row data dictionary
+            data: List of dictionaries or list of lists
 
         Returns:
             Self for method chaining
         """
-        table = self._get_state('table_instance')
-        if table:
-            rows = table.getRows()
-            if 0 <= row_index < rows.length:
-                rows[row_index].update(to_js(data))
+        processed_data = self._process_data(data)
+        self._set_state(data=processed_data)
+        self._rebuild_table()
+
+        self._trigger_callbacks('data_change', self, self.get_data())
+        return self
+
+    def get_data(self, format="dict"):
+        """
+        Get current table data.
+
+        Args:
+            format: "dict" or "list"
+
+        Returns:
+            List of data in specified format
+        """
+        data = self._get_state('data')
+
+        if format == "dict":
+            return [dict(zip(self._column_fields, row)) for row in data]
+        else:
+            return [list(row) for row in data]
+
+    def clear_data(self):
+        """Clear all table data."""
+        self._set_state(data=[])
+        self._rebuild_table()
+        self._trigger_callbacks('data_change', self, self.get_data())
         return self
 
     def download(self, format="csv", filename="data"):
@@ -284,92 +468,109 @@ class DataTable(Macro):
         Download table data.
 
         Args:
-            format: "csv", "json", "xlsx", "pdf", "html"
+            format: "csv" or "json"
             filename: Output filename (without extension)
 
         Returns:
             Self for method chaining
         """
-        table = self._get_state('table_instance')
-        if table:
-            table.download(format, f"{filename}.{format}")
+        data = self.get_data(format="dict")
+
+        if format == "csv":
+            self._download_csv(data, filename)
+        elif format == "json":
+            self._download_json(data, filename)
+
         return self
 
-    def on_ready(self, callback):
-        """
-        Register callback for when table is ready.
+    def _download_csv(self, data, filename):
+        """Download data as CSV."""
+        if not data:
+            return
 
-        Args:
-            callback: Function to call when table is initialized
+        # Create CSV content
+        columns = self._get_state('columns')
+        headers = [col.get('title', '') for col in columns]
+        csv_lines = [','.join(f'"{h}"' for h in headers)]
 
-        Returns:
-            Self for method chaining
-        """
-        return self.on('ready', callback)
+        for row in data:
+            values = [str(row.get(field, '')) for field in self._column_fields]
+            csv_lines.append(','.join(f'"{v}"' for v in values))
+
+        csv_content = '\n'.join(csv_lines)
+
+        # Trigger download
+        self._trigger_download(csv_content, f"{filename}.csv", "text/csv")
+
+    def _download_json(self, data, filename):
+        """Download data as JSON."""
+        import json
+        json_content = json.dumps(data, indent=2)
+        self._trigger_download(json_content, f"{filename}.json", "application/json")
+
+    def _trigger_download(self, content, filename, mime_type):
+        """Trigger browser download."""
+        blob = js.Blob.new([content], {"type": mime_type})
+        url = js.URL.createObjectURL(blob)
+
+        a = js.document.createElement("a")
+        a.href = url
+        a.download = filename
+        js.document.body.appendChild(a)
+        a.click()
+        js.document.body.removeChild(a)
+        js.URL.revokeObjectURL(url)
+
+    def _rebuild_table(self):
+        """Rebuild the entire table body."""
+        table = self._get_element('table')
+
+        # Remove all rows except header (first row)
+        while table._dom_element.children.length > 1:
+            table._dom_element.removeChild(table._dom_element.children[1])
+
+        # Recreate body
+        self._create_body(table)
+
+    def _get_row_as_dict(self, row_idx):
+        """Get row data as dictionary."""
+        data = self._get_state('data')
+        if row_idx < len(data):
+            return dict(zip(self._column_fields, data[row_idx]))
+        return {}
+
+    # ========== Callback Helpers ==========
 
     def on_row_click(self, callback):
-        """
-        Register callback for row clicks.
+        """Register callback for row clicks."""
+        return self.on('rowClick', callback)
 
-        Args:
-            callback: Function to call with (row_data, row_component)
+    def on_cell_change(self, callback):
+        """Register callback for cell changes."""
+        return self.on('cell_change', callback)
 
-        Returns:
-            Self for method chaining
-        """
-        def wrapped_callback(e, row):
-            row_data = row.getData().to_py() if row else None
-            callback(row_data, row)
+    def on_row_add(self, callback):
+        """Register callback for row additions."""
+        return self.on('row_add', callback)
 
-        table = self._get_state('table_instance')
-        if table:
-            table.on("rowClick", create_proxy(wrapped_callback))
+    def on_row_delete(self, callback):
+        """Register callback for row deletions."""
+        return self.on('row_delete', callback)
 
-        return self
+    def on_data_change(self, callback):
+        """Register callback for any data changes."""
+        return self.on('data_change', callback)
 
-    def on_cell_edited(self, callback):
-        """
-        Register callback for cell edits.
-
-        Args:
-            callback: Function to call with (cell_component)
-
-        Returns:
-            Self for method chaining
-        """
-        table = self._get_state('table_instance')
-        if table:
-            table.on("cellEdited", create_proxy(callback))
-
-        return self
-
-    def destroy(self):
-        """Destroy table instance and clean up."""
-        table = self._get_state('table_instance')
-        if table:
-            table.destroy()
-            self._set_state(table_instance=None, initialized=False)
-
-        super().destroy()
-
-    @property
-    def tabulator(self):
-        """
-        Access native Tabulator instance for advanced usage.
-
-        Returns:
-            JavaScript Tabulator object or None if not initialized
-        """
-        return self._get_state('table_instance')
+    # ========== Convenience Properties ==========
 
     @property
     def is_ready(self):
-        """Check if table is initialized."""
-        return self._get_state('initialized')
+        """Check if table is ready (always true for native table)."""
+        return True
 
 
-# For backward compatibility and convenience
-Column = dict  # Columns are now just dictionaries
-ColumnType = None  # Not needed with Tabulator
+# For backward compatibility
+Column = dict
+ColumnType = None
 
 __all__ = ['DataTable', 'Column', 'ColumnType']

@@ -39,11 +39,12 @@ class Modal(Macro):
             initial_content=content
         )
         
-        # Add callback types
-        self._add_callback_type('open')
-        self._add_callback_type('close')
-        self._add_callback_type('confirm')
-        self._add_callback_type('cancel')
+        # Create unified Event objects for decorator usage
+        # Events are accessed via self.events.open, self.events.close, etc.
+        self._create_event('open')
+        self._create_event('close')
+        self._create_event('confirm')
+        self._create_event('cancel')
         
         # Default styles
         default_overlay_style = {
@@ -196,8 +197,8 @@ class Modal(Macro):
     
     # Remove custom _trigger_callbacks - use base class method
     
-    def show(self):
-        """Show the modal."""
+    def open(self):
+        """Open the modal."""
         if not self._get_state('is_open'):
             overlay = self._get_element('overlay')
             overlay.style.display = "flex"
@@ -207,8 +208,12 @@ class Modal(Macro):
             if self._get_state('escape_key_close'):
                 Events.add_listener('keydown', self._handle_escape_key, owner=self)
 
-            self._trigger_callbacks('open')
+            self._fire_event('open')
         return self
+
+    def show(self):
+        """Alias for open() for backwards compatibility."""
+        return self.open()
     
     def close(self):
         """Close the modal."""
@@ -221,7 +226,7 @@ class Modal(Macro):
             if self._get_state('escape_key_close'):
                 Events.remove_listener('keydown', self._handle_escape_key)
 
-            self._trigger_callbacks('close')
+            self._fire_event('close')
         return self
     
     def toggle(self):
@@ -318,12 +323,12 @@ class Modal(Macro):
     
     def _handle_confirm(self):
         """Handle confirm button click."""
-        self._trigger_callbacks('confirm')
+        self._fire_event('confirm')
         self.close()
-    
+
     def _handle_cancel(self):
         """Handle cancel button click."""
-        self._trigger_callbacks('cancel')
+        self._fire_event('cancel')
         self.close()
     
     def on_open(self, callback):

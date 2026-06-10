@@ -87,12 +87,12 @@ class Dropdown(Macro):
         self._click_outside_handler = None
         self._escape_handler = None
         
-        # Add callback types
-        self._add_callback_type('select')
-        self._add_callback_type('deselect')
-        self._add_callback_type('change')
-        self._add_callback_type('open')
-        self._add_callback_type('close')
+        # Create unified Events for decorator usage
+        self._create_event('select')
+        self._create_event('deselect')
+        self._create_event('change')
+        self._create_event('open')
+        self._create_event('close')
         
         # Default styles
         default_button_style = {
@@ -363,7 +363,7 @@ class Dropdown(Macro):
             # Add global escape key listener
             self._add_escape_listener()
 
-            self._trigger_callbacks('open')
+            self._fire_event('open')
     
     def _close_dropdown(self):
         """Close the dropdown menu."""
@@ -391,7 +391,7 @@ class Dropdown(Macro):
             if menu:
                 self._create_menu_items(menu)
 
-            self._trigger_callbacks('close')
+            self._fire_event('close')
     
     def _handle_item_click(self, event, item):
         """Handle menu item click."""
@@ -407,11 +407,11 @@ class Dropdown(Macro):
             if item.value in selected_values:
                 # Deselect
                 selected_values.remove(item.value)
-                self._trigger_callbacks('deselect', item.value, item)
+                self._fire_event('deselect', item.value, item)
             else:
                 # Select
                 selected_values.append(item.value)
-                self._trigger_callbacks('select', item.value, item)
+                self._fire_event('select', item.value, item)
 
             self._set_state(selected_values=selected_values)
 
@@ -425,7 +425,7 @@ class Dropdown(Macro):
             if menu:
                 self._create_menu_items(menu)
 
-            self._trigger_callbacks('change', selected_values, item)
+            self._fire_event('change', selected_values, item)
 
         else:
             # Single select - close dropdown after selection
@@ -439,8 +439,8 @@ class Dropdown(Macro):
 
             self._close_dropdown()
 
-            self._trigger_callbacks('select', item.value, item)
-            self._trigger_callbacks('change', item.value, item, old_value)
+            self._fire_event('select', item.value, item)
+            self._fire_event('change', item.value, item, old_value)
     
     def _handle_search(self, event):
         """Handle search input."""
@@ -498,13 +498,13 @@ class Dropdown(Macro):
                 if value not in selected_values:
                     selected_values.append(value)
                     self._set_state(selected_values=selected_values)
-                    self._trigger_callbacks('select', value, item)
-                    self._trigger_callbacks('change', selected_values, item)
+                    self._fire_event('select', value, item)
+                    self._fire_event('change', selected_values, item)
             else:
                 old_value = self._get_state('selected_value')
                 self._set_state(selected_value=value)
                 self._trigger_callbacks('select', value, item)
-                self._trigger_callbacks('change', value, item, old_value)
+                self._fire_event('change', value, item, old_value)
             
             self._update_display()
         

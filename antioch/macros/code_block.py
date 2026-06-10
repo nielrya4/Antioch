@@ -3,14 +3,9 @@ CodeBlock macro - Syntax-highlighted code viewer/editor using CodeMirror.
 Supports multiple programming languages, themes, and optional editing.
 """
 import js
-from pyodide.ffi import create_proxy, to_js
-from .base import Macro
+from .js_library import JSLibraryMacro
 from ..elements import Div
 from ..lib.loader import inject_script, inject_stylesheet
-
-# Ensure CodeMirror is loaded when this module is imported
-inject_stylesheet('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css')
-inject_script('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js')
 
 # Common language modes (loaded on demand)
 LANGUAGE_MODES = {
@@ -45,23 +40,22 @@ THEMES = {
 }
 
 
-class CodeBlock(Macro):
+class CodeBlock(JSLibraryMacro):
     """
     Syntax-highlighted code viewer/editor component powered by CodeMirror.
 
     Supports multiple programming languages, themes, and optional editing capabilities.
-    Can load content from strings, VFS files, or server files.
 
     Usage:
-        # Basic usage with string
+        # Basic usage
         code = CodeBlock(
-            content="def hello():\\n    print('Hello, world!')",
+            content="def hello():\\n    print('Hello!')",
             language="python",
             editable=False
         )
         DOM.add(code.element)
 
-        # Editable with custom theme
+        # Editable with theme
         editor = CodeBlock(
             content="const x = 42;",
             language="javascript",
@@ -69,15 +63,7 @@ class CodeBlock(Macro):
             theme="monokai",
             line_numbers=True
         )
-        editor.on_change(lambda text: print(f"New content: {text}"))
-
-        # Load from file
-        from pyodide.http import pyfetch
-        import asyncio
-        loop = asyncio.get_event_loop()
-        response = loop.run_until_complete(pyfetch("scripts/main.py"))
-        content = loop.run_until_complete(response.string())
-        code = CodeBlock(content=content, language="python")
+        editor.on_change(lambda text: print(f"New: {text}"))
     """
 
     def __init__(self, content=None, language="python",
@@ -89,18 +75,18 @@ class CodeBlock(Macro):
 
         Args:
             content: String content to display
-            language: Programming language for syntax highlighting
-                     Options: python, javascript, html, css, markdown, json, etc.
-            editable: Whether the code can be edited (default: False)
-            theme: CodeMirror theme name (default, monokai, dracula, material, etc.)
+            language: Programming language (python, javascript, html, css, etc.)
+            editable: Whether code can be edited (default: False)
+            theme: CodeMirror theme (default, monokai, dracula, material, etc.)
             line_numbers: Show line numbers (default: True)
-            width: Width of editor container (default: "100%")
-            height: Height of editor container (default: "400px")
+            width: Width of editor container
+            height: Height of editor container
             container_style: Custom container styles
-            lazy_init: Delay initialization until ensure_initialized() is called
-            **kwargs: Additional Macro base class arguments
+            lazy_init: Delay initialization until ensure_initialized()
+            **kwargs: Additional JSLibraryMacro arguments
         """
-        super().__init__(macro_type="code_block", **kwargs)
+        # Initialize base class
+        super().__init__(macro_type="code_block", lazy_init=lazy_init, **kwargs)
 
         # Set up state
         self._set_state(
@@ -110,14 +96,7 @@ class CodeBlock(Macro):
             theme=theme,
             line_numbers=line_numbers,
             width=width,
-            height=height,
-            editor_instance=None,
-            initialized=False,
-            initializing=False,
-            init_retry_count=0,
-            mode_loaded=False,
-            theme_loaded=(theme == "default"),
-            lazy_init=lazy_init
+            height=height
         )
 
         # Default container style
@@ -132,25 +111,43 @@ class CodeBlock(Macro):
 
         self._container_style = self._merge_styles(default_container_style, container_style)
 
-        # Callback types
-        self._add_callback_type('ready')
-        self._add_callback_type('change')
-        self._add_callback_type('focus')
-        self._add_callback_type('blur')
-
-        # Load language mode and theme if needed
-        if language in LANGUAGE_MODES:
-            inject_script(LANGUAGE_MODES[language])
-
-        if theme != "default" and theme in THEMES:
-            inject_stylesheet(THEMES[theme])
+        # Create unified Events for decorator usage
+        self._create_event('change')
+        self._create_event('focus')
+        self._create_event('blur')
 
         # Initialize macro
         self._init_macro()
 
+    # ========== Required JSLibraryMacro Methods ==========
+
+    def _get_library_dependencies(self):
+        """Specify CodeMirror library to load."""
+        scripts = ['https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js']
+        stylesheets = ['https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css']
+
+        # Add language mode script if available
+        language = self._get_state('language')
+        if language in LANGUAGE_MODES:
+            scripts.append(LANGUAGE_MODES[language])
+
+        # Add theme stylesheet if available
+        theme = self._get_state('theme')
+        if theme != "default" and theme in THEMES:
+            stylesheets.append(THEMES[theme])
+
+        return {
+            'scripts': scripts,
+            'stylesheets': stylesheets
+        }
+
+    def _get_library_global_name(self):
+        """CodeMirror exposes the 'CodeMirror' global."""
+        return 'CodeMirror'
+
     def _create_elements(self):
         """Create the editor container element."""
-        # Create container with unique ID for CodeMirror
+        # Create container
         container = self._register_element('container',
                                           self._create_container(self._container_style))
 
@@ -160,148 +157,103 @@ class CodeBlock(Macro):
         textarea.style.height = "100%"
         container.add(textarea)
 
-        # Initialize CodeMirror after DOM ready (unless lazy)
-        if not self._get_state('lazy_init'):
-            init_proxy = create_proxy(lambda: self._initialize_editor())
-            js.setTimeout(init_proxy, 100)
-
         return container
 
-    def _initialize_editor(self):
-        """Initialize CodeMirror instance with retry mechanism."""
-        import js
-        from pyodide.ffi import create_proxy
+    def _create_js_instance(self):
+        """Create CodeMirror instance."""
+        content = self._get_state('content')
+        language = self._get_state('language')
+        theme = self._get_state('theme')
+        editable = self._get_state('editable')
+        line_numbers = self._get_state('line_numbers')
 
-        if self._get_state('initialized'):
-            return
+        # Map language to CodeMirror mode
+        mode_map = {
+            'python': 'python',
+            'javascript': 'javascript',
+            'json': 'javascript',
+            'html': 'htmlmixed',
+            'css': 'css',
+            'markdown': 'markdown',
+            'xml': 'xml',
+            'sql': 'sql',
+            'shell': 'shell',
+            'yaml': 'yaml',
+            'rust': 'rust',
+            'go': 'go',
+            'c': 'text/x-csrc',
+            'cpp': 'text/x-c++src',
+            'java': 'text/x-java',
+            'ruby': 'ruby',
+            'php': 'php',
+            'swift': 'swift',
+        }
 
-        retry_count = self._get_state('init_retry_count')
-        if retry_count > 50:  # Max 50 retries (5 seconds)
-            print(f"CodeMirror initialization failed after {retry_count} attempts")
-            print("Make sure CodeMirror is loaded in the HTML page")
-            return
+        mode = mode_map.get(language, 'python')
 
-        try:
-            # Check if CodeMirror is loaded
-            if not hasattr(js, 'CodeMirror') or not js.CodeMirror:
-                # Not loaded yet, retry
-                self._set_state(init_retry_count=retry_count + 1)
-                init_proxy = create_proxy(lambda: self._initialize_editor())
-                js.setTimeout(init_proxy, 100)
-                return
+        # Get the textarea element
+        textarea_element = js.document.getElementById(f"editor_{self._id}")
 
-            # Get the container element
-            textarea_element = js.document.getElementById(f"editor_{self._id}")
-            if not textarea_element:
-                # Element not ready
-                self._set_state(init_retry_count=retry_count + 1)
-                init_proxy = create_proxy(lambda: self._initialize_editor())
-                js.setTimeout(init_proxy, 100)
-                return
+        # Create CodeMirror configuration
+        config = {
+            'value': content,
+            'mode': mode,
+            'theme': theme,
+            'lineNumbers': line_numbers,
+            'readOnly': not editable,
+            'lineWrapping': True,
+            'autofocus': False,
+        }
 
-            # Build CodeMirror options
-            content = self._get_state('content')
-            language = self._get_state('language')
-            theme = self._get_state('theme')
-            editable = self._get_state('editable')
-            line_numbers = self._get_state('line_numbers')
+        # Create CodeMirror instance
+        editor_instance = js.CodeMirror(textarea_element, self._to_js(config))
 
-            # Map language to CodeMirror mode
-            mode_map = {
-                'python': 'python',
-                'javascript': 'javascript',
-                'json': 'javascript',
-                'html': 'htmlmixed',
-                'css': 'css',
-                'markdown': 'markdown',
-                'xml': 'xml',
-                'sql': 'sql',
-                'shell': 'shell',
-                'yaml': 'yaml',
-                'rust': 'rust',
-                'go': 'go',
-                'c': 'text/x-csrc',
-                'cpp': 'text/x-c++src',
-                'java': 'text/x-java',
-                'ruby': 'ruby',
-                'php': 'php',
-                'swift': 'swift',
-            }
+        # Set up event handlers if editable
+        if editable:
+            def handle_change(cm, *args):
+                new_content = cm.getValue()
+                self._set_state(content=new_content)
+                self._fire_event('change', new_content)
 
-            mode = mode_map.get(language, 'python')
+            def handle_focus(*args):
+                self._fire_event('focus', self)
 
-            # Create CodeMirror configuration
-            config = {
-                'value': content,
-                'mode': mode,
-                'theme': theme,
-                'lineNumbers': line_numbers,
-                'readOnly': not editable,
-                'lineWrapping': True,
-                'autofocus': False,
-            }
+            def handle_blur(*args):
+                self._fire_event('blur', self)
 
-            # Convert to JS object
-            js_config = to_js(config, dict_converter=js.Object.fromEntries)
+            # Add event listeners - CodeMirror uses .on() method
+            # Create and store proxies manually
+            change_proxy = self._create_proxy(handle_change)
+            focus_proxy = self._create_proxy(handle_focus)
+            blur_proxy = self._create_proxy(handle_blur)
 
-            # Create CodeMirror instance
-            # CodeMirror replaces the element, so we create it directly
-            editor_instance = js.CodeMirror(textarea_element, js_config)
-
-            # Set CodeMirror size to fill container
-            width = self._get_state('width')
-            height = self._get_state('height')
-            editor_instance.setSize(width, height)
-
-            # Store instance
-            self._set_state(editor_instance=editor_instance, initialized=True, initializing=False)
-
-            # Set up change listener if editable
-            if editable:
-                change_proxy = create_proxy(lambda *args: self._on_content_change(args[0] if args else None))
-                editor_instance.on('change', change_proxy)
-
-            # Set up focus/blur listeners
-            focus_proxy = create_proxy(lambda *args: self._trigger_callbacks('focus', self))
-            blur_proxy = create_proxy(lambda *args: self._trigger_callbacks('blur', self))
+            editor_instance.on('change', change_proxy)
             editor_instance.on('focus', focus_proxy)
             editor_instance.on('blur', blur_proxy)
 
-            # Trigger ready callback
-            self._trigger_callbacks('ready', self)
+        return editor_instance
 
-            # If this was lazy init, do an initial refresh
-            if self._get_state('lazy_init'):
-                refresh_proxy = create_proxy(lambda: self.refresh())
-                js.setTimeout(refresh_proxy, 50)
-                js.setTimeout(refresh_proxy, 150)
+    def _cleanup_js_instance(self):
+        """Clean up CodeMirror instance."""
+        if self.js_instance:
+            # CodeMirror cleanup
+            editor = self.js_instance
+            editor.toTextArea()  # Convert back to textarea before destroy
 
-        except Exception as e:
-            print(f"CodeMirror initialization error: {e}")
-            # Retry with longer delay on error
-            self._set_state(init_retry_count=retry_count + 1)
-            init_proxy = create_proxy(lambda: self._initialize_editor())
-            js.setTimeout(init_proxy, 200)
+    # ========== Public API Methods ==========
 
-    def _on_content_change(self, cm):
-        """Handle content change events."""
-        new_content = cm.getValue()
-        self._set_state(content=new_content)
-        self._trigger_callbacks('change', new_content)
-
-    def get_content(self):
+    def get_value(self):
         """
         Get current editor content.
 
         Returns:
-            str: Current content in the editor
+            String content of the editor
         """
-        editor = self._get_state('editor_instance')
-        if editor:
-            return editor.getValue()
+        if self.is_initialized:
+            return self.js_instance.getValue()
         return self._get_state('content')
 
-    def set_content(self, content):
+    def set_value(self, content):
         """
         Set editor content.
 
@@ -312,39 +264,25 @@ class CodeBlock(Macro):
             Self for method chaining
         """
         self._set_state(content=content)
-        editor = self._get_state('editor_instance')
-        if editor:
-            editor.setValue(content)
+
+        if self.is_initialized:
+            self.js_instance.setValue(content)
+
         return self
-
-    def load_file(self, file_path):
-        """
-        Load content from VFS file.
-
-        Args:
-            file_path: Path to file in virtual filesystem
-
-        Returns:
-            Self for method chaining
-        """
-        content = self._load_from_file(file_path)
-        self._set_state(file_path=file_path)
-        return self.set_content(content)
 
     def set_language(self, language):
         """
-        Change the language/mode.
+        Change the syntax highlighting language.
 
         Args:
-            language: New language (python, javascript, etc.)
+            language: New language mode
 
         Returns:
             Self for method chaining
         """
         self._set_state(language=language)
-        editor = self._get_state('editor_instance')
 
-        if editor:
+        if self.is_initialized:
             # Load mode if needed
             if language in LANGUAGE_MODES:
                 inject_script(LANGUAGE_MODES[language])
@@ -372,7 +310,7 @@ class CodeBlock(Macro):
             }
 
             mode = mode_map.get(language, 'python')
-            editor.setOption('mode', mode)
+            self.js_instance.setOption('mode', mode)
 
         return self
 
@@ -386,15 +324,14 @@ class CodeBlock(Macro):
         Returns:
             Self for method chaining
         """
-        # Load theme stylesheet if needed
+        self._set_state(theme=theme)
+
+        # Load theme CSS if needed
         if theme != "default" and theme in THEMES:
             inject_stylesheet(THEMES[theme])
 
-        self._set_state(theme=theme)
-        editor = self._get_state('editor_instance')
-
-        if editor:
-            editor.setOption('theme', theme)
+        if self.is_initialized:
+            self.js_instance.setOption('theme', theme)
 
         return self
 
@@ -403,87 +340,33 @@ class CodeBlock(Macro):
         Toggle editable mode.
 
         Args:
-            editable: True to enable editing, False to disable
+            editable: True to enable editing, False to make read-only
 
         Returns:
             Self for method chaining
         """
         self._set_state(editable=editable)
-        editor = self._get_state('editor_instance')
 
-        if editor:
-            editor.setOption('readOnly', not editable)
+        if self.is_initialized:
+            self.js_instance.setOption('readOnly', not editable)
 
-        return self
-
-    def ensure_initialized(self):
-        """
-        Ensure the editor is initialized (for lazy init).
-
-        Returns:
-            Self for method chaining
-        """
-        import js
-        from pyodide.ffi import create_proxy
-
-        if not self._get_state('initialized') and not self._get_state('initializing'):
-            # Mark as initializing to prevent multiple calls
-            self._set_state(initializing=True)
-            # Call async to allow DOM to be ready
-            init_proxy = create_proxy(lambda: self._initialize_editor())
-            js.setTimeout(init_proxy, 10)
         return self
 
     def refresh(self):
         """
-        Refresh the editor (useful after visibility changes).
+        Refresh the editor display.
+
+        Useful after showing a hidden editor or changing container size.
 
         Returns:
             Self for method chaining
         """
-        import js
+        if self.is_initialized:
+            self.js_instance.refresh()
 
-        # Ensure initialized first (for lazy init)
-        self.ensure_initialized()
-
-        editor = self._get_state('editor_instance')
-        if editor:
-            # Force size recalculation and refresh
-            width = self._get_state('width')
-            height = self._get_state('height')
-
-            # Scroll to top first
-            editor.scrollTo(0, 0)
-
-            # Set size on CodeMirror instance
-            editor.setSize(width, height)
-
-            # Force height on wrapper and scroller elements
-            wrapper = editor.getWrapperElement()
-            if wrapper:
-                wrapper.style.height = height
-                # Find and set scroller height and scroll position
-                scroller = wrapper.querySelector('.CodeMirror-scroll')
-                if scroller:
-                    scroller.style.height = height
-                    scroller.style.maxHeight = height
-                    scroller.scrollTop = 0  # Force scroll to top
-
-            # Force refresh
-            editor.refresh()
         return self
 
-    def focus(self):
-        """
-        Focus the editor.
-
-        Returns:
-            Self for method chaining
-        """
-        editor = self._get_state('editor_instance')
-        if editor:
-            editor.focus()
-        return self
+    # ========== Callback Helpers ==========
 
     def on_change(self, callback):
         """
@@ -497,44 +380,26 @@ class CodeBlock(Macro):
         """
         return self.on('change', callback)
 
-    def on_ready(self, callback):
-        """
-        Register callback for when editor is ready.
+    def on_focus(self, callback):
+        """Register callback for focus events."""
+        return self.on('focus', callback)
 
-        Args:
-            callback: Function(self) called when editor is initialized
+    def on_blur(self, callback):
+        """Register callback for blur events."""
+        return self.on('blur', callback)
 
-        Returns:
-            Self for method chaining
-        """
-        return self.on('ready', callback)
-
-    def destroy(self):
-        """Destroy editor instance and clean up."""
-        editor = self._get_state('editor_instance')
-        if editor:
-            # CodeMirror doesn't have a destroy method, but we can clear it
-            editor.toTextArea()  # Restore original textarea
-            self._set_state(editor_instance=None, initialized=False)
-
-        super().destroy()
+    # ========== Convenience Properties ==========
 
     @property
     def editor(self):
-        """
-        Access native CodeMirror instance for advanced usage.
-
-        Returns:
-            JavaScript CodeMirror object or None if not initialized
-        """
-        return self._get_state('editor_instance')
+        """Access native CodeMirror instance."""
+        return self.js_instance
 
     @property
-    def is_ready(self):
-        """Check if editor is initialized."""
-        return self._get_state('initialized')
+    def value(self):
+        """Get/set editor content."""
+        return self.get_value()
 
-    @property
-    def content(self):
-        """Get current content."""
-        return self.get_content()
+    @value.setter
+    def value(self, content):
+        self.set_value(content)

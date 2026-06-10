@@ -60,6 +60,9 @@ def inject_script(src):
     """
     Inject a script tag into document.head if not already present.
 
+    NOTE: This function is synchronous but scripts load asynchronously.
+    For sequential loading, use inject_script_async() instead.
+
     Args:
         src: URL or path to the script file
 
@@ -73,6 +76,45 @@ def inject_script(src):
     script = js.document.createElement('script')
     script.src = src
     js.document.head.appendChild(script)
+    return True
+
+
+async def inject_script_async(src):
+    """
+    Inject a script tag and wait for it to load.
+
+    This ensures the script is fully loaded before returning,
+    which is important for maintaining load order.
+
+    Args:
+        src: URL or path to the script file
+
+    Returns:
+        bool: True if injected and loaded, False if already exists
+    """
+    import asyncio
+
+    if is_script_loaded(src):
+        return False
+
+    # Create promise-based loader
+    future = asyncio.Future()
+
+    def on_load(event):
+        future.set_result(True)
+
+    def on_error(event):
+        future.set_exception(Exception(f"Failed to load script: {src}"))
+
+    # Create and configure script tag
+    script = js.document.createElement('script')
+    script.src = src
+    script.onload = on_load
+    script.onerror = on_error
+    js.document.head.appendChild(script)
+
+    # Wait for load or error
+    await future
     return True
 
 

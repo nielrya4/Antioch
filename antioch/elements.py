@@ -1,6 +1,27 @@
 import js
 from pyodide.ffi import create_proxy
 from typing import Union, Optional, List, Any, Dict
+from .event_registry import EventRegistry
+from .event import Event
+
+# Common events that all elements should have
+COMMON_EVENTS = [
+    'click', 'dblclick',
+    'mouseenter', 'mouseleave', 'mousedown', 'mouseup', 'mousemove',
+    'focus', 'blur',
+    'keydown', 'keyup', 'keypress'
+]
+
+# Element-specific events
+ELEMENT_SPECIFIC_EVENTS = {
+    'input': ['input', 'change'],
+    'textarea': ['input', 'change'],
+    'select': ['change'],
+    'form': ['submit', 'reset'],
+    'img': ['load', 'error'],
+    'video': ['play', 'pause', 'ended', 'timeupdate'],
+    'audio': ['play', 'pause', 'ended', 'timeupdate'],
+}
 
 class StyleProxy:
     """Proxy object for seamless CSS style manipulation."""
@@ -50,6 +71,24 @@ class Element:
         # Create real DOM element
         self._dom_element = js.document.createElement(tag_name)
         self._style = StyleProxy(self)
+        self._tag_name = tag_name.lower()
+
+        # Parent/child tracking for tree traversal
+        self._parent: Optional['Element'] = None
+        self._children: List['Element'] = []
+
+        # Event registry for unified event system
+        self.events = EventRegistry(owner=self)
+
+        # Auto-register common events for all elements
+        for event_name in COMMON_EVENTS:
+            self.create_event(event_name, auto_wire=True)
+
+        # Auto-register element-specific events
+        if self._tag_name in ELEMENT_SPECIFIC_EVENTS:
+            for event_name in ELEMENT_SPECIFIC_EVENTS[self._tag_name]:
+                if event_name not in self.events:
+                    self.create_event(event_name, auto_wire=True)
 
         # Handle style dictionary for direct style binding
         styles = kwargs.pop('style', {})
@@ -104,14 +143,35 @@ class Element:
     def dom_element(self):
         """Access to the underlying DOM element."""
         return self._dom_element
+
+    @property
+    def parent(self) -> Optional['Element']:
+        """Get the parent Element, or None if this is a root element."""
+        return self._parent
+
+    @property
+    def children(self) -> List['Element']:
+        """Get a list of child Elements (read-only copy)."""
+        return self._children.copy()
     
     def add(self, *items) -> 'Element':
         """Add child elements or text content. Returns self for method chaining."""
         for item in items:
             if isinstance(item, Element):
+                # Remove from old parent if it has one
+                if item._parent is not None:
+                    item._parent._children.remove(item)
+
+                # Set new parent/child relationship
+                item._parent = self
+                if item not in self._children:
+                    self._children.append(item)
+
+                # Add to DOM
                 self._dom_element.appendChild(item._dom_element)
             elif hasattr(item, 'element') and hasattr(item.element, '_dom_element'):
                 # Handle Macro objects - use their root element
+                # Note: Macros don't have parent tracking (they're wrappers)
                 self._dom_element.appendChild(item.element._dom_element)
             elif isinstance(item, str):
                 text_node = js.document.createTextNode(item)
@@ -138,22 +198,77 @@ class Element:
         """Set the text content of this element."""
         self._dom_element.textContent = text
         return self
-    
+
+    def clear(self) -> 'Element':
+        """Remove all children from this element."""
+        # Clear parent references for all children
+        for child in self._children[:]:  # Copy list to avoid modification during iteration
+            child._parent = None
+        self._children.clear()
+
+        # Clear DOM
+        self._dom_element.innerHTML = ""
+        return self
+
     def append_to(self, parent) -> 'Element':
         """Append this element to a parent element."""
         if isinstance(parent, Element):
-            parent._dom_element.appendChild(self._dom_element)
+            # Use add() to properly track parent/child
+            parent.add(self)
         else:
+            # Raw DOM element - just append without tracking
             parent.appendChild(self._dom_element)
         return self
     
     def remove(self) -> 'Element':
         """Remove this element from the DOM."""
+        # Remove from parent's children list
+        if self._parent is not None:
+            if self in self._parent._children:
+                self._parent._children.remove(self)
+            self._parent = None
+
+        # Remove from DOM
         if self._dom_element.parentNode:
             self._dom_element.parentNode.removeChild(self._dom_element)
         return self
     
     # Event handling methods
+    def create_event(self, event_name: str, auto_wire: bool = True) -> Event:
+        """
+        Create a unified Event that can be used with @when decorator.
+
+        This is useful for creating custom events on elements or for wiring
+        DOM events to the unified event system.
+
+        Args:
+            event_name: Name of the event (e.g., 'click', 'change', 'custom')
+            auto_wire: If True, automatically wire to DOM event of same name
+
+        Returns:
+            Event object accessible via self.events.{event_name}
+
+        Example:
+            button = Button("Click me")
+            button.create_event('click')  # Creates button.events.click
+
+            @when(button.events.click)
+            def on_click(sender, dom_event):
+                print("Button clicked!")
+        """
+        # Register the event
+        event = self.events.register(event_name)
+
+        # Optionally wire to DOM event
+        if auto_wire:
+            def dom_event_handler(dom_event):
+                # Fire the unified event with DOM event as argument
+                event.fire(dom_event)
+
+            self.on(event_name, dom_event_handler)
+
+        return event
+
     def on(self, event: str, handler) -> 'Element':
         """Add a single event listener."""
         if handler:

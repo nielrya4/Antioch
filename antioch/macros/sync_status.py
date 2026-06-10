@@ -35,6 +35,11 @@ class SyncStatusIndicator(Macro):
         self.show_details = show_details
         self.current_status = SyncStatus.IDLE
 
+        # Create unified Events for decorator usage
+        self._create_event('status_change')
+        self._create_event('click')
+        self._create_event('show_conflict_dialog')
+
         # Initialize the macro (creates elements)
         self._init_macro()
 
@@ -116,7 +121,7 @@ class SyncStatusIndicator(Macro):
             self._set_status("⚠", "Conflict!", "#FF5722", "#FBE9E7")
 
         # Trigger any registered callbacks
-        self._trigger_callbacks('status_change', status, details)
+        self._fire_event('status_change', status, details)
 
     def _set_status(self, icon: str, text: str, color: str, bg_color: str):
         """Update status display."""
@@ -166,7 +171,7 @@ class SyncStatusIndicator(Macro):
     def _on_click(self, event):
         """Handle click on status indicator."""
         # Trigger callback with current status
-        self._trigger_callbacks('click', self.current_status)
+        self._fire_event('click', self.current_status)
 
         # Show details or retry based on status
         if self.current_status == SyncStatus.ERROR:
@@ -177,7 +182,7 @@ class SyncStatusIndicator(Macro):
                     asyncio.create_task(self.sync_queue.force_sync())
 
         elif self.current_status == SyncStatus.CONFLICT:
-            self._trigger_callbacks('show_conflict_dialog')
+            self._fire_event('show_conflict_dialog')
 
     def set_sync_queue(self, sync_queue):
         """Set or update the sync queue to monitor."""

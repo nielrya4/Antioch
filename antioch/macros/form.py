@@ -223,10 +223,10 @@ class Form(Macro):
             show_reset=show_reset
         )
         
-        # Add callback types
-        self._add_callback_type('submit')
-        self._add_callback_type('reset')
-        self._add_callback_type('change')
+        # Create unified Events for decorator usage
+        self._create_event('submit')
+        self._create_event('reset')
+        self._create_event('change')
         
         # Default styles
         default_form_style = {
@@ -318,18 +318,18 @@ class Form(Macro):
         
         if is_valid:
             data = self.get_data()
-            self._trigger_callbacks('submit', data)
+            self._fire_event('submit', data)
         
         return False
     
     def _handle_reset(self, event):
         """Handle form reset."""
         self.reset()
-        self._trigger_callbacks('reset')
+        self._fire_event('reset')
     
     def _handle_field_change(self, field):
         """Handle field value change."""
-        self._trigger_callbacks('change', field.name, field.get_value(), field)
+        self._fire_event('change', field.name, field.get_value(), field)
     
     
     def add_field(self, field):

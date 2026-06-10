@@ -36,6 +36,9 @@ class StorageSettingsPanel(Macro):
         self.sync_queue = sync_queue
         self.current_backend = "local"
 
+        # Create unified Events for decorator usage
+        self._create_event('filesystem_changed')
+
         # Initialize the macro (creates elements)
         self._init_macro()
 
@@ -347,7 +350,7 @@ class StorageSettingsPanel(Macro):
                         self.filesystem.current_path = []
                         self.filesystem._save_filesystem()
                         js.alert("Backup imported successfully!")
-                        self._trigger_callbacks('filesystem_changed')
+                        self._fire_event('filesystem_changed')
                     except Exception as ex:
                         js.alert(f"Error importing backup: {ex}")
 

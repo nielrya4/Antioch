@@ -1,10 +1,11 @@
-def init_environment(output_folder: str, scripts_folder: str = "scripts", use_cdn_pyodide: bool = False) -> str:
+def init_environment(output_folder: str, scripts_folder: str = "scripts", use_cdn_pyodide: bool = False, antioch_source: str = None) -> str:
     """Setup antioch environment by copying necessary files to output folder.
 
     Args:
         output_folder: Destination folder for build output
         scripts_folder: Source folder containing Python scripts
         use_cdn_pyodide: If True, skip copying pyodide (will load from CDN)
+        antioch_source: Path to antioch library (if not in current directory)
     """
     import os
     import shutil
@@ -33,12 +34,21 @@ def init_environment(output_folder: str, scripts_folder: str = "scripts", use_cd
         print("Using CDN for Pyodide (skipping local copy)")
 
     # Copy antioch library
-    if os.path.exists("antioch"):
+    # Use provided source, or look in current directory
+    antioch_src = None
+    if antioch_source and os.path.exists(antioch_source):
+        antioch_src = antioch_source
+    elif os.path.exists("antioch"):
+        antioch_src = "antioch"
+
+    if antioch_src:
         antioch_dest = output_path / "antioch"
         if antioch_dest.exists():
             shutil.rmtree(antioch_dest)
-        shutil.copytree("antioch", antioch_dest)
+        shutil.copytree(antioch_src, antioch_dest)
         print(f"Copied antioch library to {antioch_dest}")
+    else:
+        print("Warning: antioch library not found")
 
     # Copy scripts folder
     if os.path.exists(scripts_folder):
