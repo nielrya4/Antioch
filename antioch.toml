@@ -1,0 +1,30 @@
+[project]
+name = "antioch-demo"
+version = "0.1.0"
+entry_point = "scripts/main.py"
+
+[build]
+output_dir = "output"
+scripts_dir = "scripts"
+pyodide_source = "cdn"  # Options: "local" or "cdn" (cdn recommended - smaller, auto-updates)
+pyodide_version = "0.29.3"  # Used when pyodide_source = "cdn"
+
+[dependencies]
+# Pyodide built-in packages to load
+pyodide_packages = [
+    "micropip",
+]
+
+# PyPI packages to install via micropip
+pypi_packages = [
+    # Add packages like: "numpy", "pandas", etc.
+    "numpy",
+]
+
+# Local packages (paths relative to project root)
+local_packages = []
+
+[server]
+host = "localhost"
+port = 8000
+auto_open = true  # Automatically open browser

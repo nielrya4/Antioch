@@ -16,7 +16,8 @@ Available Components:
 - Dropdown: Dropdown menus with search, multi-select, and item management
 - Toast: Toast notification system with auto-dismiss and positioning
 - Slider: Range slider component with value display and tick marks
-- Map: Interactive map component with markers, shapes, and tile layers
+- Map: Interactive map component with markers, shapes, and tile layers (Leaflet)
+- GoogleMap: Google Maps integration with markers, shapes, and info windows
 - WebCanvas: Programmatic canvas drawing API for graphics and animations
 - Toolbar: Horizontal menu bar with nested dropdowns and submenus
 - FileSelect: File browser for selecting files from the virtual filesystem
@@ -51,6 +52,7 @@ from .dropdown import Dropdown, DropdownItem
 from .toast import Toast, ToastManager, show_toast, info_toast, success_toast, warning_toast, error_toast, clear_all_toasts
 from .slider import Slider
 from .map import Map
+from .google_map import GoogleMap
 from .webcanvas import WebCanvas
 from .toolbar import Toolbar
 from .file_select import FileSelect
@@ -81,6 +83,7 @@ __all__ = [
     'Toast',
     'Slider',
     'Map',
+    'GoogleMap',
     'WebCanvas',
     'Toolbar',
     'FileSelect',

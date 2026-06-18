@@ -4,6 +4,10 @@ from .events import Events
 from .event import Event, when, EventGroup
 from .event_registry import EventRegistry
 
+# Themes are available as a subpackage
+# Usage: from antioch.themes import set_theme, Container, H1, Button
+# See antioch.themes documentation for details
+
 __all__ = [
     # Core
     'Element', 'DOM', 'Events',

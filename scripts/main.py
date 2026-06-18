@@ -1,7 +1,8 @@
 from antioch import *
 from examples import canvas_macros_demo, chartjs_demo, cloud_sync_demo, custom_macro_example, dataviz_app, dom_demo, example, filesystem_demo, macro_showcase, macros_demo, \
-    map_demo, pong_game, quick_macro_test, robust_datatable_demo, style_demo, toolbar_demo, webcanvas_demo, windows_demo, map_layers_demo
-from scripts.examples import geospatial_demo, code_block_demo, js_library_wrapper_demo, unified_events_demo, event_patterns, when_decorator_demo, events_namespace_demo, element_events_demo, event_combination_demo, macro_events_demo, parent_children_demo
+    map_demo, pong_game, quick_macro_test, robust_datatable_demo, style_demo, toolbar_demo, webcanvas_demo, windows_demo, map_layers_demo, \
+    geospatial_demo, code_block_demo, js_library_wrapper_demo, unified_events_demo, event_patterns, when_decorator_demo, events_namespace_demo, \
+    element_events_demo, event_combination_demo, macro_events_demo, parent_children_demo, themes_demo, google_map_demo
 from tutorials import t01_hello_world, t02_chaining_elements, t03_events
 from webpage import main as web_main
 
@@ -54,7 +55,8 @@ def main():
     # macro_events_demo.main()  # 🎉 All macros with unified event system!
 
     # Element parent/children demo (tree traversal):
-    parent_children_demo.main()  # Element.parent and Element.children
+    # parent_children_demo.main()  # Element.parent and Element.children
+    themes_demo.main()
 
 if __name__ == "__main__":
     main()
