@@ -169,6 +169,16 @@ class DOMHelper:
             self._head_wrapper._style = Element._create_style_proxy(self._head_wrapper)
         return self._head_wrapper
 
+    @property
+    def title(self) -> str:
+        """Get the page title."""
+        return self._document.title
+
+    @title.setter
+    def title(self, value: str) -> None:
+        """Set the page title."""
+        self._document.title = value
+
 
 # Create a global DOM instance
 DOM = DOMHelper()

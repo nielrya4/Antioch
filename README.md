@@ -11,6 +11,7 @@ Antioch is a modern Python framework for building rich, interactive web applicat
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
+- [Themes](#themes)
 - [Event System](#event-system)
 - [Element Tree & DOM Manipulation](#element-tree--dom-manipulation)
 - [CLI Reference](#cli-reference)
@@ -104,10 +105,10 @@ The installer is a single 7.9MB file that includes everything you need:
 
 ```bash
 # Download and run installer
-curl -sSL https://github.com/ryanmccauley/antioch/releases/latest/download/antioch-installer.sh | bash
+curl -sSL https://github.com/nielrya4/antioch/releases/latest/download/antioch-installer.sh | bash
 
 # Or download manually and install
-wget https://github.com/ryanmccauley/antioch/releases/latest/download/antioch-installer.sh
+wget https://github.com/nielrya4/antioch/releases/latest/download/antioch-installer.sh
 bash antioch-installer.sh
 
 # System-wide installation (requires sudo)
@@ -364,6 +365,189 @@ button.add_class("btn", "btn-primary")
 button.remove_class("btn-primary")
 button.toggle_class("active")
 has_class = button.has_class("btn")
+```
+
+---
+
+## Themes
+
+Antioch includes a theming system that provides consistent color palettes and styling across your application. Themes affect macros, components, and provide a `COLORS` dictionary for custom styling.
+
+### Using Themes
+
+Apply a theme at the start of your application:
+
+```python
+from antioch.themes import set_theme, COLORS
+import js
+
+def main():
+    # Set the theme
+    set_theme("basalt")
+
+    # Apply theme background color to page
+    js.document.body.style.backgroundColor = COLORS['background']
+
+    # Use theme colors in your components
+    button = Button("Click Me", style={
+        "background-color": COLORS['primary'],
+        "color": COLORS['text']
+    })
+```
+
+### Available Themes
+
+Antioch includes several built-in themes with distinct color palettes:
+
+**basalt** - Dark theme with cool grays and blue accents
+```python
+set_theme("basalt")
+# Background: Dark gray (#1e1e1e)
+# Primary: Blue (#4a9eff)
+# Text: Light gray
+```
+
+**rhyolite** - Light theme with warm earth tones
+```python
+set_theme("rhyolite")
+# Background: Light beige
+# Primary: Rust orange
+# Text: Dark brown
+```
+
+**quartzite** - Light theme with cool blue-gray tones
+```python
+set_theme("quartzite")
+# Background: Off-white (#f5f5f5)
+# Primary: Teal blue
+# Text: Charcoal
+```
+
+**marble** - Clean, minimal light theme
+```python
+set_theme("marble")
+# Background: White
+# Primary: Navy blue
+# Text: Black
+```
+
+**jasper** - Vibrant theme with bold colors
+```python
+set_theme("jasper")
+# Background: Deep purple
+# Primary: Orange
+# Text: White
+```
+
+**diorite** - Balanced dark theme with green accents
+```python
+set_theme("diorite")
+# Background: Dark slate
+# Primary: Emerald green
+# Text: Off-white
+```
+
+### Theme Colors Dictionary
+
+After setting a theme, the `COLORS` dictionary contains the active theme's colors:
+
+```python
+from antioch.themes import set_theme, COLORS
+
+set_theme("basalt")
+
+# Available color keys:
+COLORS['background']     # Main background color
+COLORS['foreground']     # Foreground/surface color
+COLORS['primary']        # Primary accent color
+COLORS['secondary']      # Secondary accent color
+COLORS['text']           # Main text color
+COLORS['text_secondary'] # Secondary text color
+COLORS['border']         # Border color
+COLORS['hover']          # Hover state color
+COLORS['success']        # Success/positive color
+COLORS['warning']        # Warning color
+COLORS['error']          # Error/danger color
+COLORS['info']           # Info color
+
+# Use in element styles
+card = Div(style={
+    "background-color": COLORS['foreground'],
+    "border": f"1px solid {COLORS['border']}",
+    "color": COLORS['text'],
+    "padding": "20px"
+})
+```
+
+### Themed Components
+
+All macro components automatically use the active theme's colors:
+
+```python
+from antioch.macros import Modal, Alert, Button
+from antioch.themes import set_theme
+
+set_theme("basalt")
+
+# Components use theme colors automatically
+modal = Modal(title="Themed Modal")
+alert = Alert(message="Success!", alert_type="success")
+button = Button("Themed Button")
+
+# The components will use basalt theme colors
+```
+
+### Creating Custom Themes
+
+You can create custom themes by defining a color dictionary:
+
+```python
+from antioch.themes import register_theme, set_theme
+
+# Define custom theme
+custom_theme = {
+    'background': '#2d2d2d',
+    'foreground': '#3a3a3a',
+    'primary': '#ff6b6b',
+    'secondary': '#4ecdc4',
+    'text': '#ffffff',
+    'text_secondary': '#b0b0b0',
+    'border': '#4a4a4a',
+    'hover': '#ff8787',
+    'success': '#51cf66',
+    'warning': '#ffd43b',
+    'error': '#ff6b6b',
+    'info': '#339af0'
+}
+
+# Register and use custom theme
+register_theme("custom", custom_theme)
+set_theme("custom")
+```
+
+### Switching Themes Dynamically
+
+You can change themes at runtime:
+
+```python
+from antioch.themes import set_theme, COLORS
+import js
+
+current_theme = "basalt"
+
+def toggle_theme():
+    global current_theme
+    current_theme = "marble" if current_theme == "basalt" else "basalt"
+    set_theme(current_theme)
+
+    # Update page background
+    js.document.body.style.backgroundColor = COLORS['background']
+
+    # Rebuild UI components to apply new theme
+    rebuild_ui()
+
+toggle_btn = Button("Toggle Theme")
+toggle_btn.on_click(lambda e: toggle_theme())
 ```
 
 ---
@@ -667,6 +851,39 @@ antioch install pandas matplotlib  # Add multiple packages
 ```
 
 This adds the package to `antioch.toml` under `[dependencies]` → `pypi_packages`. The packages will be automatically installed via micropip when your app runs.
+
+### antioch update
+
+Update your installed Antioch framework to the latest version from GitHub.
+
+```bash
+antioch update                  # Update to latest from master branch
+antioch update --branch dev     # Update from a specific branch
+antioch update --ssh            # Use SSH instead of HTTPS (requires SSH key setup)
+```
+
+This command:
+1. Creates a backup of your current Antioch installation
+2. Clones the latest version from GitHub
+3. Replaces the framework library in `~/.antioch/antioch/`
+4. Keeps your CLI, build tools, and projects unchanged
+
+**What gets updated:**
+- Antioch framework library (`antioch/` directory)
+- All themes and macros
+- Core functionality improvements
+
+**What stays unchanged:**
+- Your CLI and build tools
+- Your projects and configurations
+- Project-specific `antioch/` directories (you'll need to run `antioch build` to use the updated framework)
+
+After updating, rebuild your projects to use the new framework:
+
+```bash
+cd your-project
+antioch build
+```
 
 ### antioch --help
 
