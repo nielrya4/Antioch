@@ -93,7 +93,11 @@ def build_page(
     """
     import os
     import glob
+    import time
     from pathlib import Path
+
+    # Generate cache-busting timestamp
+    cache_buster = int(time.time() * 1000)  # milliseconds since epoch
 
     # Get all Python files from scripts folder
     python_files = []
@@ -184,9 +188,12 @@ body {{
 <script>
 async function initializeApp() {{
     try {{
+        // Cache-busting timestamp - prevents browser from serving stale files
+        const cacheBuster = {cache_buster};
+
         // Initialize Pyodide
         const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
-        
+
         // Load Pyodide packages first
         const pyodidePackages = {pyodide_packages or ['micropip']};
         console.log('Loading Pyodide packages:', pyodidePackages);
@@ -247,11 +254,11 @@ async function initializeApp() {{
             console.log(`Loading ${{label}} files:`, list);
             for(const f of list){{
                 try {{
-                    const content = await fetch(f).then(r=>r.text());
+                    const content = await fetch(f + '?v=' + cacheBuster).then(r=>r.text());
                     pyodide.FS.writeFile("/"+f, content);
                     console.log(`✓ Loaded ${{f}}`);
-                }} catch(e){{ 
-                    console.warn(`✗ Failed to load ${{f}}:`, e); 
+                }} catch(e){{
+                    console.warn(`✗ Failed to load ${{f}}:`, e);
                 }}
             }}
         }}
@@ -313,7 +320,7 @@ sys.path.insert(0, '/scripts')`;
 
         if(mainScript){{
             console.log(`Executing main script: ${{mainScript}}`);
-            const code = await fetch(mainScript).then(r=>r.text());
+            const code = await fetch(mainScript + '?v=' + cacheBuster).then(r=>r.text());
             await pyodide.runPythonAsync(code);
             console.log(`✓ Executed ${{mainScript}}`);
         }} else {{
