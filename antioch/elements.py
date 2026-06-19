@@ -521,7 +521,7 @@ class Img(Element):
 class Form(Element):
     """Form element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('form', *content, **kwargs)
         apply_theme_to_element(self, 'Form')
         if custom_style:
@@ -530,7 +530,7 @@ class Form(Element):
 class Label(Element):
     """Label element for form controls."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('label', *content, **kwargs)
         apply_theme_to_element(self, 'Label')
         if custom_style:
@@ -539,7 +539,7 @@ class Label(Element):
 class Ul(Element):
     """Unordered list element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('ul', *content, **kwargs)
         apply_theme_to_element(self, 'Ul')
         if custom_style:
@@ -548,7 +548,7 @@ class Ul(Element):
 class Ol(Element):
     """Ordered list element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('ol', *content, **kwargs)
         apply_theme_to_element(self, 'Ol')
         if custom_style:
@@ -557,7 +557,7 @@ class Ol(Element):
 class Li(Element):
     """List item element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('li', *content, **kwargs)
         apply_theme_to_element(self, 'Li')
         if custom_style:
@@ -566,7 +566,7 @@ class Li(Element):
 class Table(Element):
     """Table element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('table', *content, **kwargs)
         apply_theme_to_element(self, 'Table')
         if custom_style:
@@ -575,7 +575,7 @@ class Table(Element):
 class Tr(Element):
     """Table row element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('tr', *content, **kwargs)
         apply_theme_to_element(self, 'Tr')
         if custom_style:
@@ -584,7 +584,7 @@ class Tr(Element):
 class Td(Element):
     """Table data cell element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('td', *content, **kwargs)
         apply_theme_to_element(self, 'Td')
         if custom_style:
@@ -593,7 +593,7 @@ class Td(Element):
 class Th(Element):
     """Table header cell element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('th', *content, **kwargs)
         apply_theme_to_element(self, 'Th')
         if custom_style:
@@ -602,7 +602,7 @@ class Th(Element):
 class Thead(Element):
     """Table head element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('thead', *content, **kwargs)
         apply_theme_to_element(self, 'Thead')
         if custom_style:
@@ -611,7 +611,7 @@ class Thead(Element):
 class Tbody(Element):
     """Table body element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('tbody', *content, **kwargs)
         apply_theme_to_element(self, 'Tbody')
         if custom_style:
@@ -655,7 +655,7 @@ class Aside(Element):
 class Pre(Element):
     """Preformatted text element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('pre', *content, **kwargs)
         apply_theme_to_element(self, 'Pre')
         if custom_style:
@@ -664,7 +664,7 @@ class Pre(Element):
 class Code(Element):
     """Inline code element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('code', *content, **kwargs)
         apply_theme_to_element(self, 'Code')
         if custom_style:
@@ -703,7 +703,7 @@ class Small(Element):
 class Mark(Element):
     """Highlighted/marked text element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('mark', *content, **kwargs)
         apply_theme_to_element(self, 'Mark')
         if custom_style:
@@ -732,7 +732,7 @@ class Sup(Element):
 class Blockquote(Element):
     """Block quotation element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('blockquote', *content, **kwargs)
         apply_theme_to_element(self, 'Blockquote')
         if custom_style:
@@ -806,7 +806,7 @@ class Meter(Element):
 class Fieldset(Element):
     """Fieldset element for grouping form controls."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('fieldset', *content, **kwargs)
         apply_theme_to_element(self, 'Fieldset')
         if custom_style:
@@ -815,7 +815,7 @@ class Fieldset(Element):
 class Legend(Element):
     """Legend element for fieldset caption."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('legend', *content, **kwargs)
         apply_theme_to_element(self, 'Legend')
         if custom_style:
@@ -863,7 +863,7 @@ class Abbr(Element):
 class Kbd(Element):
     """Keyboard input element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('kbd', *content, **kwargs)
         apply_theme_to_element(self, 'Kbd')
         if custom_style:
@@ -882,7 +882,7 @@ class Var(Element):
 class Q(Element):
     """Inline quotation element."""
     def __init__(self, *content, **kwargs):
-        custom_style = kwargs.pop(\'style\', {})
+        custom_style = kwargs.pop('style', {})
         super().__init__('q', *content, **kwargs)
         apply_theme_to_element(self, 'Q')
         if custom_style:
