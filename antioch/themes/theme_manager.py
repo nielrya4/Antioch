@@ -115,7 +115,7 @@ class ThemePropertyProxy:
 
 def set_theme(theme_name):
     """
-    Set the active theme.
+    Set the active theme and update global registries for automatic element styling.
 
     Args:
         theme_name: Theme name - 'diorite', 'marble', 'rhyolite', 'quartzite', 'jasper', or 'basalt'
@@ -132,6 +132,56 @@ def set_theme(theme_name):
         )
 
     _current_theme = theme_name
+
+    # Update global registries for auto-theming
+    from antioch.core.themed import update_theme_registries
+    theme_module = _theme_modules[theme_name]
+
+    # Get element styles and handlers from theme
+    element_styles = getattr(theme_module, 'ELEMENT_STYLES', {})
+    element_handlers = getattr(theme_module, 'ELEMENT_HANDLERS', {})
+
+    # Update the global registries
+    update_theme_registries(element_styles, element_handlers)
+
+    # Inject theme keyframes (animations) into the page
+    keyframes = getattr(theme_module, 'KEYFRAMES', None)
+    if keyframes:
+        _inject_keyframes(theme_name, keyframes)
+
+
+def _keyframes_to_css(keyframes_dict):
+    """Convert Python keyframes dictionary to CSS string."""
+    css_rules = []
+
+    for animation_name, frames in keyframes_dict.items():
+        frame_rules = []
+        for selector, properties in frames.items():
+            prop_list = [f"    {key.replace('_', '-')}: {value};" for key, value in properties.items()]
+            frame_rules.append(f"  {selector} {{\n" + "\n".join(prop_list) + "\n  }")
+
+        css_rules.append(f"@keyframes {animation_name} {{\n" + "\n".join(frame_rules) + "\n}}")
+
+    return "\n\n".join(css_rules)
+
+
+def _inject_keyframes(theme_name, keyframes_dict):
+    """Inject theme keyframes into the page as CSS."""
+    import js
+
+    # Remove old theme CSS if it exists
+    old_style = js.document.getElementById(f'antioch-theme-{theme_name}-keyframes')
+    if old_style:
+        old_style.remove()
+
+    # Convert Python keyframes to CSS
+    css_content = _keyframes_to_css(keyframes_dict)
+
+    # Create new style element
+    style = js.document.createElement('style')
+    style.id = f'antioch-theme-{theme_name}-keyframes'
+    style.textContent = css_content
+    js.document.head.appendChild(style)
 
 
 def get_theme():
@@ -213,29 +263,13 @@ def get_theme_info():
     }
 
 
-# Create proxy instances for all themed components
-Button = ThemeProxy('Button')
-H1 = ThemeProxy('H1')
-H2 = ThemeProxy('H2')
-H3 = ThemeProxy('H3')
-H4 = ThemeProxy('H4')
-H5 = ThemeProxy('H5')
-H6 = ThemeProxy('H6')
-P = ThemeProxy('P')
-Div = ThemeProxy('Div')
-Input = ThemeProxy('Input')
-Textarea = ThemeProxy('Textarea')
-Select = ThemeProxy('Select')
-A = ThemeProxy('A')
-Code = ThemeProxy('Code')
-Pre = ThemeProxy('Pre')
-Hr = ThemeProxy('Hr')
-Card = ThemeProxy('Card')
-Container = ThemeProxy('Container')
-
 # Create proxy instances for theme properties
+# These allow accessing COLORS and FONTS from the active theme
 COLORS = ThemePropertyProxy('COLORS')
 FONTS = ThemePropertyProxy('FONTS')
+
+# Card and Container are now macros, not theme components
+from antioch.macros import Card, Container
 
 
 # Export everything
@@ -247,22 +281,11 @@ __all__ = [
     'get_available_themes',
     'get_theme_info',
 
-    # Themed components
-    'Button',
-    'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-    'P',
-    'Div',
-    'Input',
-    'Textarea',
-    'Select',
-    'A',
-    'Code',
-    'Pre',
-    'Hr',
-    'Card',
-    'Container',
-
     # Theme properties
     'COLORS',
     'FONTS',
+
+    # Macros (re-exported for convenience)
+    'Card',
+    'Container',
 ]

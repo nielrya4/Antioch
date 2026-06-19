@@ -2,15 +2,16 @@
 Antioch Themes Package
 
 A collection of pre-built themes for Antioch applications.
-Themes provide styled components with cohesive color palettes and typography.
+Themes provide automatic styling for elements with cohesive color palettes and typography.
 
 Quick Start:
-    from antioch.themes import set_theme, Container, H1, P, Button
+    from antioch import Button, H1, P
+    from antioch.themes import set_theme, Card, Container
 
-    # Set your preferred theme
+    # Set your preferred theme - all new elements will be automatically styled
     set_theme('diorite')  # Dark theme
 
-    # Use themed components
+    # Create elements - they automatically get theme styles!
     container = Container(
         H1("Welcome!"),
         P("This text is automatically styled by the theme"),
@@ -25,46 +26,33 @@ Available Themes:
     - jasper: Rich earthy theme with warm colors
     - basalt: Pacific Northwest coastal theme
 
-Each theme includes:
-    - Styled HTML elements (H1-H6, P, Button, Input, etc.)
-    - Custom components (Card, Container)
-    - Color palette (COLORS)
-    - Typography settings (FONTS)
+How It Works:
+    1. Call set_theme('diorite') to activate a theme
+    2. All new Button, Input, H1, etc. elements automatically get theme styles
+    3. You can still override with style={...} parameter
+    4. Access theme colors/fonts via COLORS and FONTS
 
 Usage Patterns:
 
 1. Basic Usage:
-    from antioch.themes import *
-    set_theme('marble')
-    DOM.add(H1("Hello World"))
-
-2. Multiple Themes in One App:
-    from antioch.themes import set_theme, get_theme
-
-    # Save current theme
-    original_theme = get_theme()
-
-    # Temporarily switch themes
-    set_theme('diorite')
-    dark_section = Container(H1("Dark Section"))
+    from antioch import DOM, Button, H1
+    from antioch.themes import set_theme
 
     set_theme('marble')
-    light_section = Container(H1("Light Section"))
+    DOM.add(H1("Hello World"))  # Automatically styled!
 
-    # Restore original theme
-    set_theme(original_theme)
+2. Access Theme Properties:
+    from antioch import Div
+    from antioch.themes import set_theme, COLORS, FONTS
 
-3. Access Theme Properties:
-    from antioch.themes import COLORS, FONTS
     set_theme('diorite')
-
     custom_div = Div(style={
         "background-color": COLORS['surface'],
         "color": COLORS['text'],
         "font-family": FONTS['family']
     })
 
-4. Get Theme Info:
+3. Get Theme Info:
     from antioch.themes import get_theme_info
 
     themes = get_theme_info()
@@ -80,24 +68,13 @@ from .theme_manager import (
     get_available_themes,
     get_theme_info,
 
-    # Themed components (only available after set_theme() is called)
-    Button,
-    H1, H2, H3, H4, H5, H6,
-    P,
-    Div,
-    Input,
-    Textarea,
-    Select,
-    A,
-    Code,
-    Pre,
-    Hr,
-    Card,
-    Container,
-
-    # Theme properties (only available after set_theme() is called)
+    # Theme properties (access active theme's colors and fonts)
     COLORS,
     FONTS,
+
+    # Macros (re-exported for convenience)
+    Card,
+    Container,
 )
 
 # Also expose the theme modules directly if needed
@@ -116,24 +93,13 @@ __all__ = [
     'get_available_themes',
     'get_theme_info',
 
-    # Themed components
-    'Button',
-    'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-    'P',
-    'Div',
-    'Input',
-    'Textarea',
-    'Select',
-    'A',
-    'Code',
-    'Pre',
-    'Hr',
-    'Card',
-    'Container',
-
     # Theme properties
     'COLORS',
     'FONTS',
+
+    # Macros
+    'Card',
+    'Container',
 
     # Theme modules (for direct access)
     'diorite',

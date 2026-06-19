@@ -3,6 +3,7 @@ from pyodide.ffi import create_proxy
 from typing import Union, Optional, List, Any, Dict
 from .event_registry import EventRegistry
 from .event import Event
+from .core.themed import apply_theme_to_element
 
 # Common events that all elements should have
 COMMON_EVENTS = [
@@ -361,52 +362,62 @@ class P(Element):
     """Paragraph element."""
     def __init__(self, *content, **kwargs):
         super().__init__('p', *content, **kwargs)
+        apply_theme_to_element(self, 'P')
 
 class H1(Element):
     """Heading level 1."""
     def __init__(self, *content, **kwargs):
         super().__init__('h1', *content, **kwargs)
+        apply_theme_to_element(self, 'H1')
 
 class H2(Element):
     """Heading level 2."""
     def __init__(self, *content, **kwargs):
         super().__init__('h2', *content, **kwargs)
+        apply_theme_to_element(self, 'H2')
 
 class H3(Element):
     """Heading level 3."""
     def __init__(self, *content, **kwargs):
         super().__init__('h3', *content, **kwargs)
+        apply_theme_to_element(self, 'H3')
 
 class H4(Element):
     """Heading level 4."""
     def __init__(self, *content, **kwargs):
         super().__init__('h4', *content, **kwargs)
+        apply_theme_to_element(self, 'H4')
 
 class H5(Element):
     """Heading level 5."""
     def __init__(self, *content, **kwargs):
         super().__init__('h5', *content, **kwargs)
+        apply_theme_to_element(self, 'H5')
 
 class H6(Element):
     """Heading level 6."""
     def __init__(self, *content, **kwargs):
         super().__init__('h6', *content, **kwargs)
+        apply_theme_to_element(self, 'H6')
 
 class Hr(Element):
     """Horizontal rule (line) element."""
     def __init__(self, **kwargs):
         super().__init__('hr', "", **kwargs)
+        apply_theme_to_element(self, 'Hr')
 
 class Button(Element):
     """Button element."""
     def __init__(self, *content, **kwargs):
         super().__init__('button', *content, **kwargs)
+        apply_theme_to_element(self, 'Button')
 
 class Input(Element):
     """Input element for form controls."""
     def __init__(self, input_type='text', **kwargs):
         kwargs['type'] = input_type
         super().__init__('input', **kwargs)
+        apply_theme_to_element(self, 'Input')
     
     @property
     def value(self):
@@ -420,11 +431,12 @@ class Textarea(Element):
     """Textarea element for multi-line text input."""
     def __init__(self, *content, **kwargs):
         super().__init__('textarea', *content, **kwargs)
-    
+        apply_theme_to_element(self, 'Textarea')
+
     @property
     def value(self):
         return self._dom_element.value
-    
+
     @value.setter
     def value(self, val):
         self._dom_element.value = str(val)
@@ -433,11 +445,12 @@ class Select(Element):
     """Select dropdown element."""
     def __init__(self, *content, **kwargs):
         super().__init__('select', *content, **kwargs)
-    
+        apply_theme_to_element(self, 'Select')
+
     @property
     def value(self):
         return self._dom_element.value
-    
+
     @value.setter
     def value(self, val):
         self._dom_element.value = str(val)
@@ -455,6 +468,7 @@ class A(Element):
         if href is not None:
             kwargs['href'] = href
         super().__init__('a', *content, **kwargs)
+        apply_theme_to_element(self, 'A')
 
 class Img(Element):
     """Image element."""
@@ -469,56 +483,67 @@ class Form(Element):
     """Form element."""
     def __init__(self, *content, **kwargs):
         super().__init__('form', *content, **kwargs)
+        apply_theme_to_element(self, 'Form')
 
 class Label(Element):
     """Label element for form controls."""
     def __init__(self, *content, **kwargs):
         super().__init__('label', *content, **kwargs)
+        apply_theme_to_element(self, 'Label')
 
 class Ul(Element):
     """Unordered list element."""
     def __init__(self, *content, **kwargs):
         super().__init__('ul', *content, **kwargs)
+        apply_theme_to_element(self, 'Ul')
 
 class Ol(Element):
     """Ordered list element."""
     def __init__(self, *content, **kwargs):
         super().__init__('ol', *content, **kwargs)
+        apply_theme_to_element(self, 'Ol')
 
 class Li(Element):
     """List item element."""
     def __init__(self, *content, **kwargs):
         super().__init__('li', *content, **kwargs)
+        apply_theme_to_element(self, 'Li')
 
 class Table(Element):
     """Table element."""
     def __init__(self, *content, **kwargs):
         super().__init__('table', *content, **kwargs)
+        apply_theme_to_element(self, 'Table')
 
 class Tr(Element):
     """Table row element."""
     def __init__(self, *content, **kwargs):
         super().__init__('tr', *content, **kwargs)
+        apply_theme_to_element(self, 'Tr')
 
 class Td(Element):
     """Table data cell element."""
     def __init__(self, *content, **kwargs):
         super().__init__('td', *content, **kwargs)
+        apply_theme_to_element(self, 'Td')
 
 class Th(Element):
     """Table header cell element."""
     def __init__(self, *content, **kwargs):
         super().__init__('th', *content, **kwargs)
+        apply_theme_to_element(self, 'Th')
 
 class Thead(Element):
     """Table head element."""
     def __init__(self, *content, **kwargs):
         super().__init__('thead', *content, **kwargs)
+        apply_theme_to_element(self, 'Thead')
 
 class Tbody(Element):
     """Table body element."""
     def __init__(self, *content, **kwargs):
         super().__init__('tbody', *content, **kwargs)
+        apply_theme_to_element(self, 'Tbody')
 
 class Nav(Element):
     """Navigation element."""
@@ -559,11 +584,13 @@ class Pre(Element):
     """Preformatted text element."""
     def __init__(self, *content, **kwargs):
         super().__init__('pre', *content, **kwargs)
+        apply_theme_to_element(self, 'Pre')
 
 class Code(Element):
     """Inline code element."""
     def __init__(self, *content, **kwargs):
         super().__init__('code', *content, **kwargs)
+        apply_theme_to_element(self, 'Code')
 
 class Br(Element):
     """Line break element."""
@@ -599,6 +626,7 @@ class Mark(Element):
     """Highlighted/marked text element."""
     def __init__(self, *content, **kwargs):
         super().__init__('mark', *content, **kwargs)
+        apply_theme_to_element(self, 'Mark')
 
 class Del(Element):
     """Deleted text element."""
@@ -624,6 +652,7 @@ class Blockquote(Element):
     """Block quotation element."""
     def __init__(self, *content, **kwargs):
         super().__init__('blockquote', *content, **kwargs)
+        apply_theme_to_element(self, 'Blockquote')
 
 class Canvas(Element):
     """Canvas element for graphics."""
@@ -694,11 +723,13 @@ class Fieldset(Element):
     """Fieldset element for grouping form controls."""
     def __init__(self, *content, **kwargs):
         super().__init__('fieldset', *content, **kwargs)
+        apply_theme_to_element(self, 'Fieldset')
 
 class Legend(Element):
     """Legend element for fieldset caption."""
     def __init__(self, *content, **kwargs):
         super().__init__('legend', *content, **kwargs)
+        apply_theme_to_element(self, 'Legend')
 
 class Dl(Element):
     """Description list element."""
@@ -743,6 +774,7 @@ class Kbd(Element):
     """Keyboard input element."""
     def __init__(self, *content, **kwargs):
         super().__init__('kbd', *content, **kwargs)
+        apply_theme_to_element(self, 'Kbd')
 
 class Samp(Element):
     """Sample output element."""
@@ -758,6 +790,7 @@ class Q(Element):
     """Inline quotation element."""
     def __init__(self, *content, **kwargs):
         super().__init__('q', *content, **kwargs)
+        apply_theme_to_element(self, 'Q')
 
 class Cite(Element):
     """Citation element."""

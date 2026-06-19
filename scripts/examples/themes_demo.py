@@ -11,9 +11,9 @@ Available Themes:
 - Basalt: Pacific Northwest coastal theme
 """
 
-from antioch import DOM, when
+from antioch import DOM, when, Button, H1, H2, H3, H4, H5, H6, P, Div, Input, Textarea, Select, A, Code, Pre, Hr
 from antioch.elements import Option
-from antioch.themes import *
+from antioch.themes import set_theme, get_theme_info, get_available_themes, COLORS, FONTS, Card, Container
 
 
 def main():
@@ -301,3 +301,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

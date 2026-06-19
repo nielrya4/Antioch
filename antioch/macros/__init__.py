@@ -61,6 +61,7 @@ from .download_link import DownloadLink
 from .window import Window
 from .window_manager import WindowManager
 from .code_block import CodeBlock
+from .containers import Card, Container
 
 __all__ = [
     # Base classes for custom macros
@@ -92,6 +93,8 @@ __all__ = [
     'Window',
     'WindowManager',
     'CodeBlock',
+    'Card',
+    'Container',
 
     # Form-related classes
     'FormField',

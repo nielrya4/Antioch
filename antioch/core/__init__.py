@@ -9,6 +9,7 @@ from .filesystem import VirtualFileSystem, FileSystemItem, get_filesystem
 from .storage import LocalStorageBackend, MemoryStorageBackend, create_storage_backend
 from .async_storage import AsyncLocalStorageBackend, GoogleDriveBackend, AsyncStorageBackend
 from .sync_queue import SyncQueue, SyncStatus, auto_merge_filesystems
+from .themed import apply_theme_to_element, update_theme_registries, clear_theme
 
 __all__ = [
     # Filesystem
@@ -30,4 +31,9 @@ __all__ = [
     'SyncQueue',
     'SyncStatus',
     'auto_merge_filesystems',
+
+    # Theming
+    'apply_theme_to_element',
+    'update_theme_registries',
+    'clear_theme',
 ]
