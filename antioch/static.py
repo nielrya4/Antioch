@@ -70,7 +70,7 @@ class StaticElement:
         # Add styles
         if self.styles:
             style_str = '; '.join(f'{k.replace("_", "-")}: {v}' for k, v in self.styles.items())
-            parts.append(f' style="{style_str}"')
+            parts.append(f' style="{self._escape_attr(style_str)}"')
 
         # Self-closing tags
         if self.tag in ('img', 'br', 'hr', 'input', 'meta', 'link'):
@@ -403,7 +403,9 @@ class StaticPage:
 
     def set_body_style(self, **styles) -> 'StaticPage':
         """Set styles on the body element."""
-        self.body_styles.update(styles)
+        for key, value in styles.items():
+            css_key = key.replace('_', '-')
+            self.body_styles[css_key] = str(value)
         return self
 
     def set_body_attr(self, **attrs) -> 'StaticPage':
@@ -444,7 +446,10 @@ class StaticPage:
             body_parts.append(f' {html_key}="{StaticElement._escape_attr(value)}"')
         if self.body_styles:
             style_str = '; '.join(f'{k.replace("_", "-")}: {v}' for k, v in self.body_styles.items())
-            body_parts.append(f' style="{style_str}"')
+            escaped_style = StaticElement._escape_attr(style_str)
+            print(f"DEBUG: Original style: {style_str[:100]}...")
+            print(f"DEBUG: Escaped style: {escaped_style[:100]}...")
+            body_parts.append(f' style="{escaped_style}"')
         body_parts.append('>')
         lines.append(''.join(body_parts))
 

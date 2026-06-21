@@ -116,28 +116,21 @@ def build_page(
             import sys
             import importlib.util
 
-            print(f"DEBUG: __file__ = {__file__}")
-            print(f"DEBUG: cwd = {Path.cwd()}")
-
             # Add antioch directory to sys.path so splash file can import antioch.static
             # Try to find antioch directory in common locations
+            # Prioritize current working directory over installed version
             antioch_paths = [
-                Path(__file__).parent / "antioch",  # Same directory as environment.py
-                Path.cwd() / "antioch",  # Current working directory
+                Path.cwd() / "antioch",  # Current working directory (project's antioch)
+                Path(__file__).parent / "antioch",  # Same directory as environment.py (installed antioch)
             ]
-
-            print(f"DEBUG: Checking paths: {antioch_paths}")
 
             antioch_path_added = None
             for p in antioch_paths:
-                print(f"DEBUG: Checking path {p}, exists={p.exists()}, is_dir={p.is_dir() if p.exists() else 'N/A'}")
                 if p.exists() and p.is_dir():
                     antioch_path_str = str(p.parent)
-                    print(f"DEBUG: Will add {antioch_path_str} to sys.path")
                     if antioch_path_str not in sys.path:
                         sys.path.insert(0, antioch_path_str)
                         antioch_path_added = antioch_path_str
-                    print(f"DEBUG: Added antioch path: {antioch_path_str}")
                     break
 
             # Load the splash module
@@ -231,6 +224,7 @@ def build_page(
             body_start = body_content.find('<body')
             body_tag_end = body_content.find('>', body_start)
             body_tag = body_content[body_start:body_tag_end+1]
+            print(f"DEBUG environment.py: body_tag = {body_tag[:200]}...")
             body_end = body_content.find('</body>')
             custom_body_content = body_content[body_tag_end+1:body_end].strip()
 
