@@ -1,12 +1,28 @@
-from .elements import *
-from .dom import DOM
-from .events import Events
-from .event import Event, when, EventGroup
-from .event_registry import EventRegistry
+# Only import browser-dependent modules when js is available
+try:
+    import js
+    _has_js = True
+except ImportError:
+    _has_js = False
+
+if _has_js:
+    from .elements import *
+    from .dom import DOM
+    from .events import Events
+    from .event import Event, when, EventGroup
+    from .event_registry import EventRegistry
+else:
+    # When not in browser (e.g., during build), only make static module available
+    # Users should import from antioch.static directly for build-time usage
+    pass
 
 # Themes are available as a subpackage
 # Usage: from antioch.themes import set_theme, Card, Container
 # See antioch.themes documentation for details
+
+# Static splash screens are available for build-time SEO
+# Usage: from antioch.static import StaticPage, create_loading_splash
+# See splash.py.example for details
 
 __all__ = [
     # Core

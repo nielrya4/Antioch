@@ -76,7 +76,9 @@ def build_page(
         local_packages: list = None,
         pypi_packages: list = None,
         use_cdn_pyodide: bool = False,
-        pyodide_version: str = "0.24.1"
+        pyodide_version: str = "0.24.1",
+        splash_html: str = None,
+        splash_file: str = None
 ) -> str:
     """
     Generate Pyodide-powered HTML app for antioch library.
@@ -90,6 +92,8 @@ def build_page(
         pypi_packages: list of packages to install from PyPI via micropip
         use_cdn_pyodide: If True, load Pyodide from CDN instead of local folder
         pyodide_version: Pyodide version to use when loading from CDN
+        splash_html: Custom HTML for splash screen (overrides splash_file)
+        splash_file: Path to Python file that generates splash HTML
     """
     import os
     import glob
@@ -98,6 +102,67 @@ def build_page(
 
     # Generate cache-busting timestamp
     cache_buster = int(time.time() * 1000)  # milliseconds since epoch
+
+    # Generate splash screen HTML
+    body_content = None
+    if splash_html:
+        # Use provided splash HTML directly
+        body_content = splash_html
+        print("Using custom splash HTML")
+    elif splash_file and os.path.exists(splash_file):
+        # Execute splash file to generate HTML
+        print(f"Generating splash screen from {splash_file}")
+        try:
+            import sys
+            import importlib.util
+
+            # Add antioch directory to sys.path so splash file can import antioch.static
+            # Try to find antioch directory in common locations
+            antioch_paths = [
+                Path(__file__).parent / "antioch",  # Same directory as environment.py
+                Path.cwd() / "antioch",  # Current working directory
+            ]
+
+            antioch_path_added = None
+            for p in antioch_paths:
+                if p.exists() and p.is_dir():
+                    antioch_path_str = str(p.parent)
+                    if antioch_path_str not in sys.path:
+                        sys.path.insert(0, antioch_path_str)
+                        antioch_path_added = antioch_path_str
+                    break
+
+            # Load the splash module
+            spec = importlib.util.spec_from_file_location("splash_module", splash_file)
+            splash_module = importlib.util.module_from_spec(spec)
+            sys.modules["splash_module"] = splash_module
+            spec.loader.exec_module(splash_module)
+
+            # Check for generate_splash() or main() function
+            if hasattr(splash_module, 'generate_splash'):
+                result = splash_module.generate_splash()
+                if hasattr(result, 'render'):
+                    body_content = result.render()
+                else:
+                    body_content = str(result)
+            elif hasattr(splash_module, 'main'):
+                result = splash_module.main()
+                if hasattr(result, 'render'):
+                    body_content = result.render()
+                else:
+                    body_content = str(result)
+            else:
+                print(f"Warning: {splash_file} must define generate_splash() or main() function")
+
+            # Clean up sys.path
+            if antioch_path_added and antioch_path_added in sys.path:
+                sys.path.remove(antioch_path_added)
+
+        except Exception as e:
+            print(f"Error generating splash screen: {e}")
+            import traceback
+            traceback.print_exc()
+            body_content = None
 
     # Get all Python files from scripts folder
     python_files = []
@@ -135,56 +200,239 @@ def build_page(
         pyodide_js_url = "pyodide/pyodide.js"
         pyodide_index_url = "./pyodide/"
 
-    # Generate the HTML template
-    html_content = f'''<!DOCTYPE html>
+    # Build the body content
+    if body_content:
+        # Use custom splash screen (it's a full HTML page)
+        # Extract just the body content and head extras if present
+        if '<body' in body_content and '</body>' in body_content:
+            # Extract head extras (styles, scripts, meta tags)
+            head_extras = ""
+            if '<head' in body_content and '</head>' in body_content:
+                head_start = body_content.find('<head')
+                head_start = body_content.find('>', head_start) + 1
+                head_end = body_content.find('</head>')
+                head_content = body_content[head_start:head_end]
+                # Remove default tags we'll add ourselves
+                import re
+                head_content = re.sub(r'<meta charset[^>]*>', '', head_content)
+                head_content = re.sub(r'<meta name="viewport"[^>]*>', '', head_content)
+                head_content = re.sub(r'<title>.*?</title>', '', head_content, flags=re.DOTALL)
+                head_extras = head_content.strip()
+
+            # Extract body and its attributes
+            body_start = body_content.find('<body')
+            body_tag_end = body_content.find('>', body_start)
+            body_tag = body_content[body_start:body_tag_end+1]
+            body_end = body_content.find('</body>')
+            custom_body_content = body_content[body_tag_end+1:body_end].strip()
+
+            # Generate the HTML template with custom splash
+            html_content = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Antioch - Python DOM Library</title>
 <script src="{pyodide_js_url}"></script>
+{head_extras}
+</head>
+{body_tag}
+{custom_body_content}
+<script>
+async function initializeApp() {{
+    try {{
+        // Cache-busting timestamp - prevents browser from serving stale files
+        const cacheBuster = {cache_buster};
 
-<!-- JavaScript libraries are loaded dynamically when imported -->
+        // Initialize Pyodide
+        const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
 
-<style>
-body {{
-    font-family: Arial, sans-serif;
-    background: #f5f5f5;
-    padding: 20px;
-    margin: 0;
+        // Load Pyodide packages first
+        const pyodidePackages = {pyodide_packages or ['micropip']};
+        console.log('Loading Pyodide packages:', pyodidePackages);
+        await pyodide.loadPackage(pyodidePackages);
+
+        const pythonFiles = {python_files};
+        const assetFiles = {asset_files};
+        const antiochFiles = {antioch_files};
+        const extraDirs = {additional_directories or []};
+        const localPkgs = {local_packages or []};
+        const pypiPkgs = {pypi_packages or []};
+
+        // --- Create directories in Pyodide FS ---
+        console.log('Creating directories in Pyodide filesystem...');
+
+        // Helper function to create directories recursively
+        function createDirectoryRecursive(path) {{
+            const parts = path.split('/').filter(p => p);
+            let currentPath = '';
+            for (const part of parts) {{
+                currentPath += '/' + part;
+                try {{
+                    pyodide.FS.mkdir(currentPath);
+                    console.log(`Created directory: ${{currentPath}}`);
+                }} catch (e) {{
+                    // Directory already exists, ignore
+                }}
+            }}
+        }}
+
+        // Create base directories
+        createDirectoryRecursive("/antioch");
+        createDirectoryRecursive("/antioch/macros");
+        createDirectoryRecursive("/scripts");
+        createDirectoryRecursive("/assets");
+
+        // Create all needed directories from Python files
+        const allFiles = [...pythonFiles, ...antiochFiles, ...assetFiles];
+        for (const file of allFiles) {{
+            const dirPath = file.substring(0, file.lastIndexOf('/'));
+            if (dirPath && !dirPath.includes('..')) {{
+                createDirectoryRecursive('/' + dirPath);
+            }}
+        }}
+
+        // Create additional directories
+        for(const d of extraDirs){{
+            try{{
+                pyodide.FS.mkdir(d);
+                console.log(`Created directory: ${{d}}`);
+            }}catch(e){{
+                console.warn(`Directory ${{d}} already exists or could not be created`);
+            }}
+        }}
+
+        // --- Load files into FS ---
+        async function loadFiles(list, label){{
+            console.log(`Loading ${{label}} files:`, list);
+            for(const f of list){{
+                try {{
+                    const content = await fetch(f + '?v=' + cacheBuster).then(r=>r.text());
+                    pyodide.FS.writeFile("/"+f, content);
+                    console.log(`✓ Loaded ${{f}}`);
+                }} catch(e){{
+                    console.warn(`✗ Failed to load ${{f}}:`, e);
+                }}
+            }}
+        }}
+
+        // Load all Python files
+        await loadFiles(antiochFiles, 'antioch');
+        await loadFiles(pythonFiles, 'scripts');
+        await loadFiles(assetFiles, 'assets');
+
+        // --- Setup Python path ---
+        console.log('Setting up Python path...');
+        let pythonPathSetup = `
+import sys
+# Add core directories to Python path
+sys.path.insert(0, '/')
+sys.path.insert(0, '/antioch')
+sys.path.insert(0, '/antioch/macros')
+sys.path.insert(0, '/antioch/macros/canvas_macros')
+sys.path.insert(0, '/scripts')`;
+
+        // Add additional directories to Python path
+        for(const d of extraDirs){{
+            pythonPathSetup += `\\nsys.path.insert(0, '${{d}}')`;
+        }}
+
+        pythonPathSetup += `\\nprint('Python path updated with:', sys.path[:8])`;
+        await pyodide.runPython(pythonPathSetup);
+
+        // --- Install local packages ---
+        if(localPkgs.length > 0) {{
+            console.log('Installing local packages:', localPkgs);
+            for(const pkg of localPkgs){{
+                try {{
+                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
+                    console.log(`✓ Installed local package: ${{pkg}}`);
+                }} catch(e) {{
+                    console.warn(`✗ Failed to install local package ${{pkg}}:`, e);
+                }}
+            }}
+        }}
+
+        // --- Install PyPI packages ---
+        if(pypiPkgs.length > 0) {{
+            console.log('Installing PyPI packages:', pypiPkgs);
+            for(const pkg of pypiPkgs){{
+                try {{
+                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
+                    console.log(`✓ Installed PyPI package: ${{pkg}}`);
+                }} catch(e) {{
+                    console.warn(`✗ Failed to install PyPI package ${{pkg}}:`, e);
+                }}
+            }}
+        }}
+
+        // --- Execute main.py if exists ---
+        let mainScript = pythonFiles.includes('{scripts_folder}/main.py')
+                        ? '{scripts_folder}/main.py'
+                        : (pythonFiles.includes('main.py') ? 'main.py' : null);
+
+        if(mainScript){{
+            console.log(`Executing main script: ${{mainScript}}`);
+            const code = await fetch(mainScript + '?v=' + cacheBuster).then(r=>r.text());
+            await pyodide.runPythonAsync(code);
+            console.log(`✓ Executed ${{mainScript}}`);
+        }} else {{
+            console.log('No main.py found, skipping execution');
+        }}
+
+        // Hide loading and show content (if elements still exist)
+        const loadingEl = document.getElementById("loading");
+        const contentEl = document.getElementById("content");
+
+        if (loadingEl) {{
+            loadingEl.style.display = "none";
+        }}
+        if (contentEl) {{
+            contentEl.style.display = "block";
+        }}
+        console.log('🎉 Application loaded successfully!');
+
+    }} catch(err) {{
+        console.error('💥 Error loading application:', err);
+        const loadingEl = document.getElementById("loading");
+        if (loadingEl) {{
+            loadingEl.innerHTML =
+                `<div style="color:red; padding:20px;">
+                    <h3>Error loading application</h3>
+                    <p>${{err.message}}</p>
+                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
+                </div>`;
+        }} else {{
+            // If loading element doesn't exist, create error display in body
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML =
+                `<div style="color:red; padding:20px;">
+                    <h3>Error loading application</h3>
+                    <p>${{err.message}}</p>
+                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
+                </div>`;
+            document.body.appendChild(errorDiv);
+        }}
+    }}
 }}
 
-#loading {{
-    text-align: center;
-    margin-top: 60px;
-}}
-#content {{
-    display: none;
-    max-width: 1200px;
-    margin: 0 auto;
-}}
-.spinner {{
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 4px solid #ccc;
-    border-top-color: #037bfc;
-    animation: spin 1.2s linear infinite;
-    margin: auto;
-}}
-@keyframes spin {{
-    0% {{ transform: rotate(0deg); }}
-    100% {{ transform: rotate(360deg); }}
-}}
-</style>
+// Start loading when page is ready
+window.addEventListener("DOMContentLoaded", initializeApp);
+</script>
+</body>
+</html>'''
+        else:
+            # Custom splash didn't have proper HTML structure, use it as-is in body
+            html_content = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antioch - Python DOM Library</title>
+<script src="{pyodide_js_url}"></script>
 </head>
 <body>
-<div id="loading">
-    <div class="spinner"></div>
-    <p>Loading Antioch Library...</p>
-</div>
-<div id="content"></div>
-
+{body_content}
 <script>
 async function initializeApp() {{
     try {{
@@ -368,12 +616,246 @@ window.addEventListener("DOMContentLoaded", initializeApp);
 </script>
 </body>
 </html>'''
-    
+    else:
+        # No custom splash - use default loading screen
+        html_content = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antioch - Python DOM Library</title>
+<script src="{pyodide_js_url}"></script>
+
+<!-- JavaScript libraries are loaded dynamically when imported -->
+
+<style>
+body {{
+    font-family: Arial, sans-serif;
+    background: #f5f5f5;
+    padding: 20px;
+    margin: 0;
+}}
+
+#loading {{
+    text-align: center;
+    margin-top: 60px;
+}}
+#content {{
+    display: none;
+    max-width: 1200px;
+    margin: 0 auto;
+}}
+.spinner {{
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 4px solid #ccc;
+    border-top-color: #037bfc;
+    animation: spin 1.2s linear infinite;
+    margin: auto;
+}}
+@keyframes spin {{
+    0% {{ transform: rotate(0deg); }}
+    100% {{ transform: rotate(360deg); }}
+}}
+</style>
+</head>
+<body>
+<div id="loading">
+    <div class="spinner"></div>
+    <p>Loading Antioch Library...</p>
+</div>
+<div id="content"></div>
+
+<script>
+async function initializeApp() {{
+    try {{
+        // Cache-busting timestamp - prevents browser from serving stale files
+        const cacheBuster = {cache_buster};
+
+        // Initialize Pyodide
+        const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
+
+        // Load Pyodide packages first
+        const pyodidePackages = {pyodide_packages or ['micropip']};
+        console.log('Loading Pyodide packages:', pyodidePackages);
+        await pyodide.loadPackage(pyodidePackages);
+
+        const pythonFiles = {python_files};
+        const assetFiles = {asset_files};
+        const antiochFiles = {antioch_files};
+        const extraDirs = {additional_directories or []};
+        const localPkgs = {local_packages or []};
+        const pypiPkgs = {pypi_packages or []};
+
+        // --- Create directories in Pyodide FS ---
+        console.log('Creating directories in Pyodide filesystem...');
+
+        // Helper function to create directories recursively
+        function createDirectoryRecursive(path) {{
+            const parts = path.split('/').filter(p => p);
+            let currentPath = '';
+            for (const part of parts) {{
+                currentPath += '/' + part;
+                try {{
+                    pyodide.FS.mkdir(currentPath);
+                    console.log(`Created directory: ${{currentPath}}`);
+                }} catch (e) {{
+                    // Directory already exists, ignore
+                }}
+            }}
+        }}
+
+        // Create base directories
+        createDirectoryRecursive("/antioch");
+        createDirectoryRecursive("/antioch/macros");
+        createDirectoryRecursive("/scripts");
+        createDirectoryRecursive("/assets");
+
+        // Create all needed directories from Python files
+        const allFiles = [...pythonFiles, ...antiochFiles, ...assetFiles];
+        for (const file of allFiles) {{
+            const dirPath = file.substring(0, file.lastIndexOf('/'));
+            if (dirPath && !dirPath.includes('..')) {{
+                createDirectoryRecursive('/' + dirPath);
+            }}
+        }}
+
+        // Create additional directories
+        for(const d of extraDirs){{
+            try{{
+                pyodide.FS.mkdir(d);
+                console.log(`Created directory: ${{d}}`);
+            }}catch(e){{
+                console.warn(`Directory ${{d}} already exists or could not be created`);
+            }}
+        }}
+
+        // --- Load files into FS ---
+        async function loadFiles(list, label){{
+            console.log(`Loading ${{label}} files:`, list);
+            for(const f of list){{
+                try {{
+                    const content = await fetch(f + '?v=' + cacheBuster).then(r=>r.text());
+                    pyodide.FS.writeFile("/"+f, content);
+                    console.log(`✓ Loaded ${{f}}`);
+                }} catch(e){{
+                    console.warn(`✗ Failed to load ${{f}}:`, e);
+                }}
+            }}
+        }}
+
+        // Load all Python files
+        await loadFiles(antiochFiles, 'antioch');
+        await loadFiles(pythonFiles, 'scripts');
+        await loadFiles(assetFiles, 'assets');
+
+        // --- Setup Python path ---
+        console.log('Setting up Python path...');
+        let pythonPathSetup = `
+import sys
+# Add core directories to Python path
+sys.path.insert(0, '/')
+sys.path.insert(0, '/antioch')
+sys.path.insert(0, '/antioch/macros')
+sys.path.insert(0, '/antioch/macros/canvas_macros')
+sys.path.insert(0, '/scripts')`;
+
+        // Add additional directories to Python path
+        for(const d of extraDirs){{
+            pythonPathSetup += `\\nsys.path.insert(0, '${{d}}')`;
+        }}
+
+        pythonPathSetup += `\\nprint('Python path updated with:', sys.path[:8])`;
+        await pyodide.runPython(pythonPathSetup);
+
+        // --- Install local packages ---
+        if(localPkgs.length > 0) {{
+            console.log('Installing local packages:', localPkgs);
+            for(const pkg of localPkgs){{
+                try {{
+                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
+                    console.log(`✓ Installed local package: ${{pkg}}`);
+                }} catch(e) {{
+                    console.warn(`✗ Failed to install local package ${{pkg}}:`, e);
+                }}
+            }}
+        }}
+
+        // --- Install PyPI packages ---
+        if(pypiPkgs.length > 0) {{
+            console.log('Installing PyPI packages:', pypiPkgs);
+            for(const pkg of pypiPkgs){{
+                try {{
+                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
+                    console.log(`✓ Installed PyPI package: ${{pkg}}`);
+                }} catch(e) {{
+                    console.warn(`✗ Failed to install PyPI package ${{pkg}}:`, e);
+                }}
+            }}
+        }}
+
+        // --- Execute main.py if exists ---
+        let mainScript = pythonFiles.includes('{scripts_folder}/main.py')
+                        ? '{scripts_folder}/main.py'
+                        : (pythonFiles.includes('main.py') ? 'main.py' : null);
+
+        if(mainScript){{
+            console.log(`Executing main script: ${{mainScript}}`);
+            const code = await fetch(mainScript + '?v=' + cacheBuster).then(r=>r.text());
+            await pyodide.runPythonAsync(code);
+            console.log(`✓ Executed ${{mainScript}}`);
+        }} else {{
+            console.log('No main.py found, skipping execution');
+        }}
+
+        // Hide loading and show content (if elements still exist)
+        const loadingEl = document.getElementById("loading");
+        const contentEl = document.getElementById("content");
+
+        if (loadingEl) {{
+            loadingEl.style.display = "none";
+        }}
+        if (contentEl) {{
+            contentEl.style.display = "block";
+        }}
+        console.log('🎉 Application loaded successfully!');
+
+    }} catch(err) {{
+        console.error('💥 Error loading application:', err);
+        const loadingEl = document.getElementById("loading");
+        if (loadingEl) {{
+            loadingEl.innerHTML =
+                `<div style="color:red; padding:20px;">
+                    <h3>Error loading application</h3>
+                    <p>${{err.message}}</p>
+                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
+                </div>`;
+        }} else {{
+            // If loading element doesn't exist, create error display in body
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML =
+                `<div style="color:red; padding:20px;">
+                    <h3>Error loading application</h3>
+                    <p>${{err.message}}</p>
+                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
+                </div>`;
+            document.body.appendChild(errorDiv);
+        }}
+    }}
+}}
+
+// Start loading when page is ready
+window.addEventListener("DOMContentLoaded", initializeApp);
+</script>
+</body>
+</html>'''
+
     # Create output directory if needed
     output_path = Path(filename).parent
     if output_path != Path('.'):
         output_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Write the HTML file
     out = Path(filename)
     out.parent.mkdir(parents=True, exist_ok=True)

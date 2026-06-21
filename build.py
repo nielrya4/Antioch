@@ -19,7 +19,7 @@ PYPI_PACKAGES = [
 # Pyodide Configuration
 # Set to "local" to use local pyodide folder (requires download_pyodide.py)
 # Set to "cdn" to load from CDN (smaller deployment, requires internet)
-PYODIDE_SOURCE = "local"  # Options: "local" or "cdn"
+PYODIDE_SOURCE = "local" # Options: "local" or "cdn"
 PYODIDE_VERSION = "0.29.3"  # Used when PYODIDE_SOURCE = "cdn"
 
 def main():

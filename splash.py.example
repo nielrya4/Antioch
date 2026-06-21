@@ -1,0 +1,180 @@
+"""
+Example splash screen for Antioch applications.
+
+This file demonstrates how to create a custom splash screen with SEO-friendly
+static HTML that appears while Pyodide loads.
+
+Usage:
+    1. Copy this file to your project root as splash.py
+    2. Customize the content, styling, and SEO meta tags
+    3. Pass splash_file="splash.py" to build_page() in your build script
+"""
+
+from antioch.static import (
+    StaticPage, create_loading_splash,
+    H1, H2, P, Div, A, Img, Section, Header, Main
+)
+
+
+def generate_splash():
+    """
+    Generate the splash screen HTML.
+
+    This function is called during the build process to create static HTML.
+    Return a StaticPage object or any object with a .render() method.
+    """
+
+    # Method 1: Use the pre-built loading splash
+    # return create_loading_splash(
+    #     title="My Awesome App",
+    #     message="Initializing Python environment...",
+    #     spinner=True,
+    #     background_color="#1e1e1e",
+    #     text_color="#ffffff",
+    #     spinner_color="#4a9eff"
+    #)
+
+    # Method 2: Create a custom splash screen
+    page = StaticPage(title="My Awesome App", lang="en")
+
+    # SEO Meta Tags
+    page.set_description("An amazing Python web application built with Antioch")
+    page.set_keywords("python", "web app", "antioch", "pyodide")
+    page.set_author("Your Name")
+
+    # Open Graph tags for social media
+    page.set_og_title("My Awesome App")
+    page.set_og_description("An amazing Python web application")
+    page.set_og_image("https://example.com/preview.png")
+    page.set_og_url("https://example.com")
+
+    # Add custom CSS
+    page.add_style("""
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            animation: fadeIn 1s ease-in;
+        }
+
+        p {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .features {
+            margin-top: 40px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .feature {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 200px;
+        }
+
+        .feature h3 {
+            margin-bottom: 10px;
+        }
+    """)
+
+    # Set body styling
+    page.set_body_attr(id="splash-screen")
+
+    # Build the content
+    container = Div(class_name="container", id="loading-splash")
+
+    container.add(
+        H1("My Awesome App"),
+        P("Building amazing things with Python in the browser"),
+        Div(class_name="spinner"),
+        P("Loading Python environment...", style={"font-size": "0.9em", "opacity": "0.7"})
+    )
+
+    # Optional: Add feature highlights for SEO
+    features = Div(class_name="features")
+    features.add(
+        Div(
+            H3("Fast"),
+            P("Lightning-fast performance"),
+            class_name="feature"
+        ),
+        Div(
+            H3("Pure Python"),
+            P("No JavaScript required"),
+            class_name="feature"
+        ),
+        Div(
+            H3("Modern"),
+            P("Built with WebAssembly"),
+            class_name="feature"
+        )
+    )
+
+    container.add(features)
+    page.add(container)
+
+    return page
+
+
+# Alternative: You can also use main() instead of generate_splash()
+def main():
+    """Alternative entry point - works the same as generate_splash()"""
+    return generate_splash()
+
+
+if __name__ == "__main__":
+    # Test the splash screen locally
+    page = generate_splash()
+    with open("splash_preview.html", "w") as f:
+        f.write(page.render())
+    print("Preview saved to splash_preview.html")
