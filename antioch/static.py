@@ -447,8 +447,6 @@ class StaticPage:
         if self.body_styles:
             style_str = '; '.join(f'{k.replace("_", "-")}: {v}' for k, v in self.body_styles.items())
             escaped_style = StaticElement._escape_attr(style_str)
-            print(f"DEBUG: Original style: {style_str[:100]}...")
-            print(f"DEBUG: Escaped style: {escaped_style[:100]}...")
             body_parts.append(f' style="{escaped_style}"')
         body_parts.append('>')
         lines.append(''.join(body_parts))

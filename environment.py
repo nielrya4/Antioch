@@ -224,7 +224,6 @@ def build_page(
             body_start = body_content.find('<body')
             body_tag_end = body_content.find('>', body_start)
             body_tag = body_content[body_start:body_tag_end+1]
-            print(f"DEBUG environment.py: body_tag = {body_tag[:200]}...")
             body_end = body_content.find('</body>')
             custom_body_content = body_content[body_tag_end+1:body_end].strip()
 
