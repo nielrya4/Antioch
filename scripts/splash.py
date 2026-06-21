@@ -5,7 +5,25 @@ This splash screen displays while Pyodide loads, providing SEO-friendly
 static HTML content for search engines and a better user experience.
 """
 
-from antioch.static import StaticPage, Div, H1, P, Span
+from antioch.static import StaticPage, Div, P, keyframe, rotate, opacity, translateY
+
+
+# Define keyframe animations pythonically!
+@keyframe
+def spin():
+    rotate({0: 0, 100: 360})
+
+
+@keyframe
+def fadeInDown():
+    opacity({0: 0, 100: 1})
+    translateY({0: -30, 100: 0})
+
+
+@keyframe
+def fadeInUp():
+    opacity({0: 0, 100: 1})
+    translateY({0: 30, 100: 0})
 
 
 def generate_splash():
@@ -27,41 +45,10 @@ def generate_splash():
     page.set_og_description("Build web applications with pure Python in the browser")
     page.set_og_url("https://github.com/nielrya4/antioch")
 
-    # Add keyframe animations as CSS (can't be done pythonically)
-    page.add_style("""
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @keyframes progress {
-            0% { width: 0%; }
-            50% { width: 70%; }
-            100% { width: 100%; }
-        }
-
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-    """)
+    # Add animations to page
+    page.add_style(spin.render())
+    page.add_style(fadeInDown.render())
+    page.add_style(fadeInUp.render())
 
     # Set body styles using dictionary assignment (just like DOM.body.style in Antioch!)
     page.body.style = {
@@ -103,17 +90,9 @@ def generate_splash():
         'animation': 'fadeInUp 0.8s ease-out 0.2s both'
     })
 
-    # Loading text
-    loading_text = P("Initializing Python environment...", style={
-        'font-size': '1.1em',
-        'margin-bottom': '20px',
-        'opacity': '0.8',
-        'animation': 'fadeInUp 0.8s ease-out 0.4s both'
-    })
-
     # Spinner
     spinner_container = Div(style={
-        'margin': '30px auto',
+        'margin': '30px auto 20px auto',
         'animation': 'fadeInUp 0.8s ease-out 0.6s both'
     })
     spinner = Div(style={
@@ -127,68 +106,16 @@ def generate_splash():
     })
     spinner_container.add(spinner)
 
-    # Progress bar
-    progress_bar = Div(style={
-        'width': '300px',
-        'height': '4px',
-        'background': 'rgba(255, 255, 255, 0.2)',
-        'border-radius': '2px',
-        'margin': '30px auto 10px auto',
-        'overflow': 'hidden',
+    # Loading text
+    loading_text = P("Loading modules...", style={
+        'font-size': '1.1em',
+        'margin': '0',
+        'opacity': '0.8',
         'animation': 'fadeInUp 0.8s ease-out 0.8s both'
     })
-    progress_fill = Div(style={
-        'height': '100%',
-        'background': 'white',
-        'border-radius': '2px',
-        'animation': 'progress 2s ease-in-out infinite'
-    })
-    progress_bar.add(progress_fill)
-
-    # Status text
-    status = P("Loading WebAssembly modules...", style={
-        'font-size': '0.9em',
-        'opacity': '0.7',
-        'animation': 'fadeInUp 0.8s ease-out 1s both'
-    })
-
-    # Feature highlights (good for SEO)
-    features = Div(style={
-        'margin-top': '40px',
-        'display': 'flex',
-        'gap': '20px',
-        'justify-content': 'center',
-        'flex-wrap': 'wrap',
-        'animation': 'fadeInUp 0.8s ease-out 1.2s both'
-    })
-
-    # Individual feature badges
-    feature1 = Span("🐍 Pure Python", style={
-        'background': 'rgba(255, 255, 255, 0.1)',
-        'padding': '15px 25px',
-        'border-radius': '20px',
-        'font-size': '0.9em',
-        'backdrop-filter': 'blur(10px)'
-    })
-    feature2 = Span("⚡ Fast", style={
-        'background': 'rgba(255, 255, 255, 0.1)',
-        'padding': '15px 25px',
-        'border-radius': '20px',
-        'font-size': '0.9em',
-        'backdrop-filter': 'blur(10px)'
-    })
-    feature3 = Span("🎨 Modern", style={
-        'background': 'rgba(255, 255, 255, 0.1)',
-        'padding': '15px 25px',
-        'border-radius': '20px',
-        'font-size': '0.9em',
-        'backdrop-filter': 'blur(10px)'
-    })
-
-    features.add(feature1, feature2, feature3)
 
     # Add all elements to container
-    container.add(logo, tagline, loading_text, spinner_container, progress_bar, status, features)
+    container.add(logo, tagline, spinner_container, loading_text)
 
     page.add(container)
 

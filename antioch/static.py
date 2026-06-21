@@ -9,6 +9,165 @@ and SEO-friendly content.
 from typing import Dict, List, Optional, Union, Any
 
 
+class Keyframe:
+    """Pythonic way to define CSS keyframes."""
+
+    def __init__(self, name: str):
+        """
+        Create a CSS keyframe animation.
+
+        Args:
+            name: Animation name
+        """
+        self.name = name
+        # frames: {percentage: {property: [values...]}}
+        # Multiple properties can be set at same percentage
+        self.frames: Dict[str, Dict[str, List[str]]] = {}
+
+    def add_property(self, percentage: int, property_name: str, value: str):
+        """Add a property value at a specific percentage."""
+        percent_key = f'{percentage}%'
+        if percent_key not in self.frames:
+            self.frames[percent_key] = {}
+        if property_name not in self.frames[percent_key]:
+            self.frames[percent_key][property_name] = []
+        self.frames[percent_key][property_name].append(value)
+
+    def render(self) -> str:
+        """Render the keyframe to CSS."""
+        lines = [f'@keyframes {self.name} {{']
+
+        for percentage, properties in sorted(self.frames.items(), key=lambda x: int(x[0].rstrip('%'))):
+            lines.append(f'    {percentage} {{')
+            for property_name, values in properties.items():
+                css_property = property_name.replace('_', '-')
+                # Combine multiple transform values with space
+                if property_name == 'transform':
+                    combined_value = ' '.join(values)
+                    lines.append(f'        {css_property}: {combined_value};')
+                else:
+                    # For non-transform properties, just use the last value
+                    lines.append(f'        {css_property}: {values[-1]};')
+            lines.append('    }')
+
+        lines.append('}')
+        return '\n'.join(lines)
+
+
+# Global state for decorator
+_current_keyframe: Optional[Keyframe] = None
+
+
+# Transform and property helper functions
+def rotate(values: Dict[int, Union[int, float, str]]):
+    """Add rotation keyframes. Values in degrees."""
+    global _current_keyframe
+    if _current_keyframe is None:
+        raise RuntimeError("rotate() must be called inside a @keyframe decorated function")
+
+    for percentage, value in values.items():
+        # Convert to string with 'deg' unit if numeric
+        if isinstance(value, (int, float)):
+            value_str = f'{value}deg'
+        else:
+            value_str = value
+        _current_keyframe.add_property(percentage, 'transform', f'rotate({value_str})')
+
+
+def translateX(values: Dict[int, Union[int, float, str]]):
+    """Add translateX keyframes. Values in px or other units."""
+    global _current_keyframe
+    if _current_keyframe is None:
+        raise RuntimeError("translateX() must be called inside a @keyframe decorated function")
+
+    for percentage, value in values.items():
+        if isinstance(value, (int, float)):
+            value_str = f'{value}px'
+        else:
+            value_str = value
+        _current_keyframe.add_property(percentage, 'transform', f'translateX({value_str})')
+
+
+def translateY(values: Dict[int, Union[int, float, str]]):
+    """Add translateY keyframes. Values in px or other units."""
+    global _current_keyframe
+    if _current_keyframe is None:
+        raise RuntimeError("translateY() must be called inside a @keyframe decorated function")
+
+    for percentage, value in values.items():
+        if isinstance(value, (int, float)):
+            value_str = f'{value}px'
+        else:
+            value_str = value
+        _current_keyframe.add_property(percentage, 'transform', f'translateY({value_str})')
+
+
+def opacity(values: Dict[int, Union[int, float, str]]):
+    """Add opacity keyframes."""
+    global _current_keyframe
+    if _current_keyframe is None:
+        raise RuntimeError("opacity() must be called inside a @keyframe decorated function")
+
+    for percentage, value in values.items():
+        _current_keyframe.add_property(percentage, 'opacity', str(value))
+
+
+def scale(values: Dict[int, Union[int, float, str]]):
+    """Add scale keyframes."""
+    global _current_keyframe
+    if _current_keyframe is None:
+        raise RuntimeError("scale() must be called inside a @keyframe decorated function")
+
+    for percentage, value in values.items():
+        _current_keyframe.add_property(percentage, 'transform', f'scale({value})')
+
+
+def width(values: Dict[int, Union[int, float, str]]):
+    """Add width keyframes. Values in % or other units."""
+    global _current_keyframe
+    if _current_keyframe is None:
+        raise RuntimeError("width() must be called inside a @keyframe decorated function")
+
+    for percentage, value in values.items():
+        if isinstance(value, (int, float)):
+            value_str = f'{value}%'
+        else:
+            value_str = value
+        _current_keyframe.add_property(percentage, 'width', value_str)
+
+
+# Decorator
+def keyframe(func):
+    """
+    Decorator to define CSS keyframes pythonically.
+
+    Usage:
+        @keyframe
+        def spin():
+            rotate({0: 0, 100: 360})
+
+        @keyframe
+        def fadeInUp():
+            opacity({0: 0, 100: 1})
+            translateY({0: 30, 100: 0})
+    """
+    global _current_keyframe
+
+    # Create keyframe with function name
+    _current_keyframe = Keyframe(func.__name__)
+
+    # Execute function to collect property calls
+    func()
+
+    # Get the rendered CSS
+    result = _current_keyframe
+
+    # Reset global state
+    _current_keyframe = None
+
+    return result
+
+
 class StaticElement:
     """Base class for static HTML elements."""
 
