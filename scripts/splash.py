@@ -63,19 +63,18 @@ def generate_splash():
         }
     """)
 
-    # Set body styles pythonically - don't override background completely,
-    # just set styles for the splash that won't interfere with DOM
-    page.set_body_style(
-        margin='0',
-        padding='0',
-        font_family='-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-        background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        min_height='100vh',
-        display='flex',
-        justify_content='center',
-        align_items='center',
-        color='white'
-    )
+    # Set body styles using dictionary assignment (just like DOM.body.style in Antioch!)
+    page.body.style = {
+        'margin': '0',
+        'padding': '0',
+        'font_family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        'background': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        'min_height': '100vh',
+        'display': 'flex',
+        'justify_content': 'center',
+        'align_items': 'center',
+        'color': 'white'
+    }
 
     # Build the splash screen content with pythonic styles
     container = Div(id="loading-splash", style={

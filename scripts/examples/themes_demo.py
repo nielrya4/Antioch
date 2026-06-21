@@ -43,9 +43,9 @@ def main():
 
         # Set body background
         from antioch import js
-        js.document.body.style.backgroundColor = COLORS['background']
-        js.document.body.style.margin = "0"
-        js.document.body.style.padding = "0"
+        DOM.body.style.background = COLORS['background']
+        DOM.body.style.margin = "0"
+        DOM.body.style.padding = "0"
 
         # Create main container
         container = Container()

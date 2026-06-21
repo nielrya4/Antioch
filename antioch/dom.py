@@ -1,6 +1,6 @@
 import js
 from typing import Union, Optional
-from .elements import Element
+from .elements import Element, StyleProxy
 from .event_registry import EventRegistry
 
 

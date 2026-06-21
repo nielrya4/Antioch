@@ -6,7 +6,7 @@ without requiring Pyodide or JavaScript. Perfect for creating splash screens
 and SEO-friendly content.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 
 class StaticElement:
@@ -256,6 +256,61 @@ class Style(StaticElement):
         super().__init__('style', css, **attrs)
 
 
+class StaticStyleProxy:
+    """Style proxy for StaticPage body element (mimics element StyleProxy)."""
+
+    def __init__(self, styles_dict: Dict[str, str]):
+        self._styles = styles_dict
+
+    def __setattr__(self, name, value):
+        if name.startswith('_'):
+            super().__setattr__(name, value)
+            return
+
+        css_property = name.replace('_', '-')
+        if value is None:
+            self._styles.pop(css_property, None)
+        else:
+            self._styles[css_property] = str(value)
+
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            return super().__getattribute__(name)
+        css_property = name.replace('_', '-')
+        return self._styles.get(css_property, '')
+
+    def update(self, styles: Dict[str, Any]) -> 'StaticStyleProxy':
+        """Update multiple styles using a dictionary."""
+        for property_name, value in styles.items():
+            css_property = property_name.replace('_', '-')
+            if value is None:
+                self._styles.pop(css_property, None)
+            else:
+                self._styles[css_property] = str(value)
+        return self
+
+
+class StaticBodyProxy:
+    """Proxy for StaticPage body to provide element-like API."""
+
+    def __init__(self, page: 'StaticPage'):
+        object.__setattr__(self, '_page', page)
+        object.__setattr__(self, '_style', StaticStyleProxy(page.body_styles))
+
+    @property
+    def style(self):
+        """Get the style proxy."""
+        return self._style
+
+    @style.setter
+    def style(self, styles: Dict[str, Any]):
+        """Set styles using a dictionary."""
+        if isinstance(styles, dict):
+            self._style.update(styles)
+        else:
+            raise TypeError("style must be set to a dictionary")
+
+
 class StaticPage:
     """Static HTML page generator with SEO support."""
 
@@ -268,6 +323,7 @@ class StaticPage:
         self.og_tags: Dict[str, str] = {}
         self.body_attrs: Dict[str, str] = {}
         self.body_styles: Dict[str, str] = {}
+        self.body = StaticBodyProxy(self)
 
     def set_title(self, title: str) -> 'StaticPage':
         """Set the page title."""

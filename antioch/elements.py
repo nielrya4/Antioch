@@ -62,12 +62,12 @@ class StyleProxy:
 
 class Element:
     """Base class for all DOM elements with real js.document integration."""
-    
+
     @staticmethod
     def _create_style_proxy(element):
         """Helper method to create StyleProxy for existing DOM elements."""
         return StyleProxy(element)
-    
+
     def __init__(self, tag_name: str, *content, **kwargs):
         # Create real DOM element
         self._dom_element = js.document.createElement(tag_name)

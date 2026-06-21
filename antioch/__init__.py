@@ -11,41 +11,41 @@ if _has_js:
     from .events import Events
     from .event import Event, when, EventGroup
     from .event_registry import EventRegistry
+
+    # Themes are available as a subpackage
+    # Usage: from antioch.themes import set_theme, Card, Container
+    # See antioch.themes documentation for details
+
+    __all__ = [
+        # Core
+        'Element', 'DOM', 'Events',
+        # Unified Event System
+        'Event', 'when', 'EventGroup', 'EventRegistry',
+        # Layout & Structure
+        'Div', 'Span', 'Section', 'Article', 'Main', 'Aside', 'Header', 'Footer', 'Nav',
+        # Text Content
+        'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'Hr', 'Pre', 'Code', 'Blockquote',
+        'Strong', 'Em', 'B', 'I', 'Small', 'Mark', 'Del', 'Ins', 'Sub', 'Sup',
+        'Abbr', 'Cite', 'Q', 'Kbd', 'Samp', 'Var', 'Time',
+        # Lists
+        'Ul', 'Ol', 'Li', 'Dl', 'Dt', 'Dd',
+        # Tables
+        'Table', 'Tr', 'Td', 'Th', 'Thead', 'Tbody',
+        # Forms
+        'Form', 'Input', 'Textarea', 'Select', 'Option', 'Button', 'Label',
+        'Fieldset', 'Legend',
+        # Links & Media
+        'A', 'Img', 'Video', 'Audio', 'Canvas', 'Svg', 'Iframe',
+        # Interactive
+        'Details', 'Summary', 'Progress', 'Meter',
+        # Other
+        'Br', 'Figure', 'Figcaption',
+    ]
 else:
     # When not in browser (e.g., during build), only make static module available
     # Users should import from antioch.static directly for build-time usage
+
+    # Static splash screens are available for build-time SEO
+    # Usage: from antioch.static import StaticPage, create_loading_splash
+    # See splash.py.example for details
     pass
-
-# Themes are available as a subpackage
-# Usage: from antioch.themes import set_theme, Card, Container
-# See antioch.themes documentation for details
-
-# Static splash screens are available for build-time SEO
-# Usage: from antioch.static import StaticPage, create_loading_splash
-# See splash.py.example for details
-
-__all__ = [
-    # Core
-    'Element', 'DOM', 'Events',
-    # Unified Event System
-    'Event', 'when', 'EventGroup', 'EventRegistry',
-    # Layout & Structure
-    'Div', 'Span', 'Section', 'Article', 'Main', 'Aside', 'Header', 'Footer', 'Nav',
-    # Text Content
-    'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'Hr', 'Pre', 'Code', 'Blockquote',
-    'Strong', 'Em', 'B', 'I', 'Small', 'Mark', 'Del', 'Ins', 'Sub', 'Sup',
-    'Abbr', 'Cite', 'Q', 'Kbd', 'Samp', 'Var', 'Time',
-    # Lists
-    'Ul', 'Ol', 'Li', 'Dl', 'Dt', 'Dd',
-    # Tables
-    'Table', 'Tr', 'Td', 'Th', 'Thead', 'Tbody',
-    # Forms
-    'Form', 'Input', 'Textarea', 'Select', 'Option', 'Button', 'Label',
-    'Fieldset', 'Legend',
-    # Links & Media
-    'A', 'Img', 'Video', 'Audio', 'Canvas', 'Svg', 'Iframe',
-    # Interactive
-    'Details', 'Summary', 'Progress', 'Meter',
-    # Other
-    'Br', 'Figure', 'Figcaption',
-]

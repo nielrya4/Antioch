@@ -116,6 +116,9 @@ def build_page(
             import sys
             import importlib.util
 
+            print(f"DEBUG: __file__ = {__file__}")
+            print(f"DEBUG: cwd = {Path.cwd()}")
+
             # Add antioch directory to sys.path so splash file can import antioch.static
             # Try to find antioch directory in common locations
             antioch_paths = [
@@ -123,13 +126,18 @@ def build_page(
                 Path.cwd() / "antioch",  # Current working directory
             ]
 
+            print(f"DEBUG: Checking paths: {antioch_paths}")
+
             antioch_path_added = None
             for p in antioch_paths:
+                print(f"DEBUG: Checking path {p}, exists={p.exists()}, is_dir={p.is_dir() if p.exists() else 'N/A'}")
                 if p.exists() and p.is_dir():
                     antioch_path_str = str(p.parent)
+                    print(f"DEBUG: Will add {antioch_path_str} to sys.path")
                     if antioch_path_str not in sys.path:
                         sys.path.insert(0, antioch_path_str)
                         antioch_path_added = antioch_path_str
+                    print(f"DEBUG: Added antioch path: {antioch_path_str}")
                     break
 
             # Load the splash module
