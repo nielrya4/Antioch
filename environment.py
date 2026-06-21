@@ -124,6 +124,12 @@ def build_page(
                 Path(__file__).parent / "antioch",  # Same directory as environment.py (installed antioch)
             ]
 
+            # CRITICAL: Remove any cached antioch imports so Python re-imports from the correct path
+            # This ensures we use the local project's antioch, not the installed version
+            antioch_modules = [key for key in sys.modules.keys() if key == 'antioch' or key.startswith('antioch.')]
+            for mod in antioch_modules:
+                del sys.modules[mod]
+
             antioch_path_added = None
             for p in antioch_paths:
                 if p.exists() and p.is_dir():
