@@ -14,7 +14,7 @@ Available Themes:
 from antioch import DOM, when, Button, H1, H2, H3, H4, H5, H6, P, Div, Input, Textarea, Select, A, Code, Pre, Hr
 from antioch.elements import Option
 from antioch.themes import set_theme, get_theme_info, get_available_themes, COLORS, FONTS, Card, Container
-
+from antioch.component_lib.button import ButtonPrimary
 
 def main():
     """Main demo function."""
@@ -123,7 +123,7 @@ def main():
 
         increment_btn = Button("Increment")
         decrement_btn = Button("Decrement")
-        reset_btn = Button("Reset")
+        reset_btn = ButtonPrimary("Reset")
 
         @when(increment_btn.events.click)
         def increment(sender, event):
