@@ -93,7 +93,9 @@ def build_page(
         use_cdn_pyodide: If True, load Pyodide from CDN instead of local folder
         pyodide_version: Pyodide version to use when loading from CDN
         splash_html: Custom HTML for splash screen (overrides splash_file)
-        splash_file: Path to Python file that generates splash HTML
+        splash_file: Path to .html or .py file for splash screen
+                     - .html files are loaded directly
+                     - .py files must define generate_splash() or main() function
     """
     import os
     import glob
@@ -110,65 +112,79 @@ def build_page(
         body_content = splash_html
         print("Using custom splash HTML")
     elif splash_file and os.path.exists(splash_file):
-        # Execute splash file to generate HTML
-        print(f"Generating splash screen from {splash_file}")
-        try:
-            import sys
-            import importlib.util
+        # Check if it's an HTML file or Python file
+        if splash_file.endswith('.html'):
+            # Read HTML file directly
+            print(f"Loading splash screen from {splash_file}")
+            try:
+                with open(splash_file, 'r', encoding='utf-8') as f:
+                    body_content = f.read()
+            except Exception as e:
+                print(f"Error reading splash HTML file: {e}")
+                body_content = None
+        elif splash_file.endswith('.py'):
+            # Execute Python splash file to generate HTML
+            print(f"Generating splash screen from {splash_file}")
+            try:
+                import sys
+                import importlib.util
 
-            # Add antioch directory to sys.path so splash file can import antioch.static
-            # Try to find antioch directory in common locations
-            # Prioritize current working directory over installed version
-            antioch_paths = [
-                Path.cwd() / "antioch",  # Current working directory (project's antioch)
-                Path(__file__).parent / "antioch",  # Same directory as environment.py (installed antioch)
-            ]
+                # Add antioch directory to sys.path so splash file can import antioch.static
+                # Try to find antioch directory in common locations
+                # Prioritize current working directory over installed version
+                antioch_paths = [
+                    Path.cwd() / "antioch",  # Current working directory (project's antioch)
+                    Path(__file__).parent / "antioch",  # Same directory as environment.py (installed antioch)
+                ]
 
-            # CRITICAL: Remove any cached antioch imports so Python re-imports from the correct path
-            # This ensures we use the local project's antioch, not the installed version
-            antioch_modules = [key for key in sys.modules.keys() if key == 'antioch' or key.startswith('antioch.')]
-            for mod in antioch_modules:
-                del sys.modules[mod]
+                # CRITICAL: Remove any cached antioch imports so Python re-imports from the correct path
+                # This ensures we use the local project's antioch, not the installed version
+                antioch_modules = [key for key in sys.modules.keys() if key == 'antioch' or key.startswith('antioch.')]
+                for mod in antioch_modules:
+                    del sys.modules[mod]
 
-            antioch_path_added = None
-            for p in antioch_paths:
-                if p.exists() and p.is_dir():
-                    antioch_path_str = str(p.parent)
-                    if antioch_path_str not in sys.path:
-                        sys.path.insert(0, antioch_path_str)
-                        antioch_path_added = antioch_path_str
-                    break
+                antioch_path_added = None
+                for p in antioch_paths:
+                    if p.exists() and p.is_dir():
+                        antioch_path_str = str(p.parent)
+                        if antioch_path_str not in sys.path:
+                            sys.path.insert(0, antioch_path_str)
+                            antioch_path_added = antioch_path_str
+                        break
 
-            # Load the splash module
-            spec = importlib.util.spec_from_file_location("splash_module", splash_file)
-            splash_module = importlib.util.module_from_spec(spec)
-            sys.modules["splash_module"] = splash_module
-            spec.loader.exec_module(splash_module)
+                # Load the splash module
+                spec = importlib.util.spec_from_file_location("splash_module", splash_file)
+                splash_module = importlib.util.module_from_spec(spec)
+                sys.modules["splash_module"] = splash_module
+                spec.loader.exec_module(splash_module)
 
-            # Check for generate_splash() or main() function
-            if hasattr(splash_module, 'generate_splash'):
-                result = splash_module.generate_splash()
-                if hasattr(result, 'render'):
-                    body_content = result.render()
+                # Check for generate_splash() or main() function
+                if hasattr(splash_module, 'generate_splash'):
+                    result = splash_module.generate_splash()
+                    if hasattr(result, 'render'):
+                        body_content = result.render()
+                    else:
+                        body_content = str(result)
+                elif hasattr(splash_module, 'main'):
+                    result = splash_module.main()
+                    if hasattr(result, 'render'):
+                        body_content = result.render()
+                    else:
+                        body_content = str(result)
                 else:
-                    body_content = str(result)
-            elif hasattr(splash_module, 'main'):
-                result = splash_module.main()
-                if hasattr(result, 'render'):
-                    body_content = result.render()
-                else:
-                    body_content = str(result)
-            else:
-                print(f"Warning: {splash_file} must define generate_splash() or main() function")
+                    print(f"Warning: {splash_file} must define generate_splash() or main() function")
 
-            # Clean up sys.path
-            if antioch_path_added and antioch_path_added in sys.path:
-                sys.path.remove(antioch_path_added)
+                # Clean up sys.path
+                if antioch_path_added and antioch_path_added in sys.path:
+                    sys.path.remove(antioch_path_added)
 
-        except Exception as e:
-            print(f"Error generating splash screen: {e}")
-            import traceback
-            traceback.print_exc()
+            except Exception as e:
+                print(f"Error generating splash screen: {e}")
+                import traceback
+                traceback.print_exc()
+                body_content = None
+        else:
+            print(f"Warning: splash_file must be .html or .py file, got: {splash_file}")
             body_content = None
 
     # Get all Python files from scripts folder

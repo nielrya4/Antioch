@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antioch Test</title>
+<style>
+body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-family: system-ui, sans-serif;
+}
+.container {
+    text-align: center;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.loading {
+    animation: pulse 2s ease-in-out infinite;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>ANTIOCH</h1>
+    <p class="loading">Loading from HTML file...</p>
+</div>
+</body>
+</html>
