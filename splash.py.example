@@ -42,6 +42,9 @@ def generate_splash():
     page.set_keywords("python", "web app", "antioch", "pyodide")
     page.set_author("Your Name")
 
+    # Browser tab icon: an emoji, a path like "assets/favicon.png", or a URL
+    page.set_favicon("🚀")
+
     # Open Graph tags for social media
     page.set_og_title("My Awesome App")
     page.set_og_description("An amazing Python web application")

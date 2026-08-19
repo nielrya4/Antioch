@@ -22,6 +22,11 @@ PYPI_PACKAGES = [
 PYODIDE_SOURCE = "local" # Options: "local" or "cdn"
 PYODIDE_VERSION = "0.29.3"  # Used when PYODIDE_SOURCE = "cdn"
 
+# Page Configuration
+PAGE_TITLE = "Antioch Demo"
+# Emoji, a path such as "assets/favicon.png", or an absolute URL
+FAVICON = "🏛️"
+
 def main():
     print("🚀 Building Antioch Demo...")
 
@@ -44,7 +49,9 @@ def main():
         pyodide_packages=PYODIDE_PACKAGES,
         pypi_packages=PYPI_PACKAGES,
         use_cdn_pyodide=use_cdn,
-        pyodide_version=PYODIDE_VERSION
+        pyodide_version=PYODIDE_VERSION,
+        title=PAGE_TITLE,
+        favicon=FAVICON
     )
 
     print(page_result)

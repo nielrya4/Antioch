@@ -916,6 +916,9 @@ output_dir = "output"
 scripts_dir = "scripts"
 pyodide_source = "cdn"        # Options: "local" or "cdn"
 pyodide_version = "0.29.3"    # Used when pyodide_source = "cdn"
+splash_file = "scripts/splash.py"  # Optional: static splash screen
+title = "My Antioch App"      # Optional: browser tab title
+favicon = "assets/favicon.png"     # Optional: emoji, path, or URL
 
 [dependencies]
 # Pyodide built-in packages to load
@@ -955,6 +958,11 @@ auto_open = true              # Automatically open browser when running
   - `"cdn"` - Load from CDN (recommended - 8MB builds, always up-to-date)
   - `"local"` - Bundle Pyodide locally (~300MB builds, works offline)
 - `pyodide_version` - Pyodide version when using CDN (e.g., `"0.29.3"`)
+- `splash_file` - Optional `.html` or `.py` file rendered as a static splash screen while Pyodide loads
+- `title` - Browser tab title. When omitted, the splash screen's `<title>` is used, then `[project] name`
+- `favicon` - Browser tab icon. Accepts an emoji (`"🏛️"`, embedded as an inline SVG so no image file is
+  needed), a path (`"assets/favicon.png"` — files outside `assets/` and the scripts folder are copied
+  next to `index.html`), or an absolute URL / data URI
 
 #### [dependencies]
 

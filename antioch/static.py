@@ -470,6 +470,39 @@ class StaticBodyProxy:
             raise TypeError("style must be set to a dictionary")
 
 
+FAVICON_MIME_TYPES = {
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+    '.gif': 'image/gif',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+}
+
+
+def emoji_favicon(emoji: str) -> str:
+    """
+    An emoji as an inline SVG data URI, usable anywhere an icon href is.
+
+    Lets a page have a favicon without shipping an image file.
+    """
+    from urllib.parse import quote
+
+    escaped = StaticElement._escape_html(emoji)
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+           '<text x="50%" y="50%" dy=".35em" text-anchor="middle" '
+           f'font-size="80">{escaped}</text></svg>')
+    return 'data:image/svg+xml,' + quote(svg)
+
+
+def _is_emoji(value: str) -> bool:
+    """Distinguish a literal emoji from a path, URL or data URI."""
+    if not value or len(value) > 8:
+        return False
+    return not any(c in value for c in '/\\.:')
+
+
 class StaticPage:
     """Static HTML page generator with SEO support."""
 
@@ -482,11 +515,37 @@ class StaticPage:
         self.og_tags: Dict[str, str] = {}
         self.body_attrs: Dict[str, str] = {}
         self.body_styles: Dict[str, str] = {}
+        self.favicon: Optional[Dict[str, str]] = None
         self.body = StaticBodyProxy(self)
 
     def set_title(self, title: str) -> 'StaticPage':
         """Set the page title."""
         self.title = title
+        return self
+
+    def set_favicon(self, icon: str, type: str = None, sizes: str = None) -> 'StaticPage':
+        """
+        Set the browser-tab icon.
+
+        Args:
+            icon: An emoji (rendered as an inline SVG), a path such as
+                  "assets/favicon.png", or an absolute URL / data URI.
+            type: MIME type. Inferred from the file extension when omitted.
+            sizes: Optional `sizes` attribute, e.g. "32x32".
+        """
+        import os
+
+        if _is_emoji(icon):
+            href, inferred = emoji_favicon(icon), 'image/svg+xml'
+        else:
+            href = icon
+            inferred = FAVICON_MIME_TYPES.get(os.path.splitext(icon.lower())[1])
+
+        self.favicon = {'href': href}
+        if type or inferred:
+            self.favicon['type'] = type or inferred
+        if sizes:
+            self.favicon['sizes'] = sizes
         return self
 
     def add_meta(self, name: str = '', content: str = '', **attrs) -> 'StaticPage':
@@ -591,6 +650,16 @@ class StaticPage:
         # Open Graph tags
         for property, content in self.og_tags.items():
             lines.append(f'  <meta property="{property}" content="{StaticElement._escape_attr(content)}">')
+
+        # Favicon
+        if self.favicon:
+            attrs = ''.join(
+                f' {key}="{StaticElement._escape_attr(value)}"'
+                for key, value in self.favicon.items()
+            )
+            lines.append(f'  <link rel="icon"{attrs}>')
+            lines.append(f'  <link rel="apple-touch-icon"'
+                         f' href="{StaticElement._escape_attr(self.favicon["href"])}">')
 
         # Additional head elements
         for element in self.head_elements:
