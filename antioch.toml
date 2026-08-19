@@ -9,6 +9,8 @@ scripts_dir = "scripts"
 pyodide_source = "cdn"  # Options: "local" or "cdn" (cdn recommended - smaller, auto-updates)
 pyodide_version = "0.29.3"  # Used when pyodide_source = "cdn"
 splash_file = "scripts/splash.py"  # Optional: Path to HTML or Python file that generates static splash screen
+title = ""  # Optional: Browser tab title. Falls back to the splash screen's <title>, then project.name
+favicon = ""  # Optional: Emoji (e.g. "🏛️"), path (e.g. "assets/favicon.png"), or URL
 
 [dependencies]
 # Pyodide built-in packages to load

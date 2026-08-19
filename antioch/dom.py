@@ -179,6 +179,40 @@ class DOMHelper:
         """Set the page title."""
         self._document.title = value
 
+    @property
+    def favicon(self) -> str:
+        """Get the current favicon href, or an empty string if none is set."""
+        link = self._document.querySelector('link[rel~="icon"]')
+        return link.getAttribute('href') if link else ''
+
+    @favicon.setter
+    def favicon(self, icon: str) -> None:
+        """
+        Set the browser-tab icon at runtime.
+
+        Accepts an emoji (rendered as an inline SVG), a path such as
+        "assets/favicon.png", or an absolute URL / data URI. The existing
+        <link rel="icon"> is reused when there is one, so repeated assignment
+        does not pile up tags.
+        """
+        from .static import FAVICON_MIME_TYPES, _is_emoji, emoji_favicon
+
+        if _is_emoji(icon):
+            href, mime = emoji_favicon(icon), 'image/svg+xml'
+        else:
+            href = icon
+            extension = icon.lower().rsplit('.', 1)
+            mime = FAVICON_MIME_TYPES.get('.' + extension[-1]) if len(extension) > 1 else None
+
+        link = self._document.querySelector('link[rel~="icon"]')
+        if link is None:
+            link = self._document.createElement('link')
+            link.setAttribute('rel', 'icon')
+            self._document.head.appendChild(link)
+        link.setAttribute('href', href)
+        if mime:
+            link.setAttribute('type', mime)
+
 
 # Create a global DOM instance
 DOM = DOMHelper()

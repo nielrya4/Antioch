@@ -64,9 +64,128 @@ def init_environment(output_folder: str, scripts_folder: str = "scripts", use_cd
         if assets_dest.exists():
             shutil.rmtree(assets_dest)
         shutil.copytree("assets", assets_dest)
-        print(f"Copied {scripts_folder} folder to {assets_dest}")
+        print(f"Copied assets folder to {assets_dest}")
 
     return f"Environment setup complete in {output_path}"
+
+
+DEFAULT_PAGE_TITLE = "Antioch App"
+
+FAVICON_MIME_TYPES = {
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def _escape_html_text(text: str) -> str:
+    """Escape text for use in element content or an attribute value."""
+    return (str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+def _extract_title(html: str):
+    """The contents of a splash page's <title>, if it declares one."""
+    import re
+
+    match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.DOTALL | re.IGNORECASE)
+    if not match:
+        return None
+    title = match.group(1).strip()
+    return title or None
+
+
+def _emoji_favicon_href(emoji: str) -> str:
+    """An emoji rendered as an inline SVG data URI, so no image file is needed."""
+    from urllib.parse import quote
+
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+           f'<text x="50%" y="50%" dy=".35em" text-anchor="middle" '
+           f'font-size="80">{_escape_html_text(emoji)}</text></svg>')
+    return "data:image/svg+xml," + quote(svg)
+
+
+def _looks_like_emoji(favicon: str) -> bool:
+    """Distinguish a literal emoji from a path or URL."""
+    if len(favicon) > 8 or not favicon.strip():
+        return False
+    return not any(c in favicon for c in "/\\.:")
+
+
+def _resolve_favicon(favicon: str, output_dir: str, scripts_folder: str):
+    """
+    Turn a favicon setting into (href, mime_type).
+
+    Accepts an emoji, an absolute URL or data URI, or a path to an image file.
+    Files that do not already live somewhere init_environment copies (assets/,
+    the scripts folder) are copied next to the generated HTML, so the built
+    output stays self-contained.
+    """
+    import os
+    import shutil
+
+    favicon = str(favicon).strip()
+    if not favicon:
+        return None, None
+
+    if _looks_like_emoji(favicon):
+        return _emoji_favicon_href(favicon), "image/svg+xml"
+
+    lowered = favicon.lower()
+    if lowered.startswith(("http://", "https://", "//", "data:")):
+        mime = FAVICON_MIME_TYPES.get(os.path.splitext(lowered)[1])
+        return favicon, mime
+
+    mime = FAVICON_MIME_TYPES.get(os.path.splitext(lowered)[1])
+
+    if not os.path.exists(favicon):
+        print(f"Warning: favicon not found: {favicon}")
+        return favicon.replace(os.sep, "/"), mime
+
+    # Already inside a directory the build copies verbatim, so the relative
+    # path stays correct in the output.
+    normalized = os.path.normpath(favicon)
+    copied_roots = [os.path.normpath("assets"), os.path.normpath(scripts_folder)]
+    if any(normalized.startswith(root + os.sep) for root in copied_roots):
+        return normalized.replace(os.sep, "/"), mime
+
+    destination = os.path.join(output_dir, os.path.basename(favicon))
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        if os.path.abspath(destination) != os.path.abspath(favicon):
+            shutil.copyfile(favicon, destination)
+        print(f"Copied favicon to {destination}")
+    except Exception as e:
+        print(f"Warning: could not copy favicon: {e}")
+
+    return os.path.basename(favicon), mime
+
+
+def _favicon_tags(href: str, mime: str) -> str:
+    """The <link> tags for a resolved favicon, or an empty string."""
+    if not href:
+        return ""
+    type_attr = f' type="{mime}"' if mime else ""
+    escaped = _escape_html_text(href)
+    return (f'<link rel="icon"{type_attr} href="{escaped}">\n'
+            f'<link rel="apple-touch-icon" href="{escaped}">\n')
+
+
+def _strip_icon_links(head_html: str) -> str:
+    """Drop a splash page's icon links when the build supplies its own."""
+    import re
+
+    return re.sub(
+        r'<link[^>]*rel=["\'][^"\']*\b(?:icon|apple-touch-icon)\b[^"\']*["\'][^>]*>',
+        "", head_html, flags=re.IGNORECASE)
+
 
 def build_page(
         filename: str,
@@ -78,7 +197,10 @@ def build_page(
         use_cdn_pyodide: bool = False,
         pyodide_version: str = "0.24.1",
         splash_html: str = None,
-        splash_file: str = None
+        splash_file: str = None,
+        title: str = None,
+        default_title: str = DEFAULT_PAGE_TITLE,
+        favicon: str = None
 ) -> str:
     """
     Generate Pyodide-powered HTML app for antioch library.
@@ -96,6 +218,13 @@ def build_page(
         splash_file: Path to .html or .py file for splash screen
                      - .html files are loaded directly
                      - .py files must define generate_splash() or main() function
+        title: Page title. Overrides a title set by the splash screen.
+        default_title: Used when neither `title` nor the splash screen sets one.
+        favicon: Emoji, URL/data URI, or path to an image file. Overrides an
+                 icon set by the splash screen.
+
+    The page title is taken from the first of: `title`, the splash screen's
+    <title>, `default_title`.
     """
     import os
     import glob
@@ -187,6 +316,17 @@ def build_page(
             print(f"Warning: splash_file must be .html or .py file, got: {splash_file}")
             body_content = None
 
+    # Resolve the page title: explicit argument, then whatever the splash
+    # screen declared, then the fallback.
+    splash_title = _extract_title(body_content) if body_content else None
+    page_title = _escape_html_text(title or splash_title or default_title
+                                   or DEFAULT_PAGE_TITLE)
+
+    output_dir = os.path.dirname(filename) or "."
+    favicon_href, favicon_mime = _resolve_favicon(favicon, output_dir, scripts_folder) \
+        if favicon else (None, None)
+    favicon_html = _favicon_tags(favicon_href, favicon_mime)
+
     # Get all Python files from scripts folder
     python_files = []
     if os.path.exists(scripts_folder):
@@ -239,7 +379,12 @@ def build_page(
                 import re
                 head_content = re.sub(r'<meta charset[^>]*>', '', head_content)
                 head_content = re.sub(r'<meta name="viewport"[^>]*>', '', head_content)
-                head_content = re.sub(r'<title>.*?</title>', '', head_content, flags=re.DOTALL)
+                head_content = re.sub(r'<title[^>]*>.*?</title>', '', head_content,
+                                      flags=re.DOTALL | re.IGNORECASE)
+                if favicon_html:
+                    # The build's favicon wins; keeping both would emit two
+                    # competing <link rel="icon"> tags.
+                    head_content = _strip_icon_links(head_content)
                 head_extras = head_content.strip()
 
             # Extract body and its attributes
@@ -255,8 +400,8 @@ def build_page(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Antioch - Python DOM Library</title>
-<script src="{pyodide_js_url}"></script>
+<title>{page_title}</title>
+{favicon_html}<script src="{pyodide_js_url}"></script>
 {head_extras}
 </head>
 {body_tag}
@@ -451,8 +596,8 @@ window.addEventListener("DOMContentLoaded", initializeApp);
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Antioch - Python DOM Library</title>
-<script src="{pyodide_js_url}"></script>
+<title>{page_title}</title>
+{favicon_html}<script src="{pyodide_js_url}"></script>
 </head>
 <body>
 {body_content}
@@ -646,8 +791,8 @@ window.addEventListener("DOMContentLoaded", initializeApp);
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Antioch - Python DOM Library</title>
-<script src="{pyodide_js_url}"></script>
+<title>{page_title}</title>
+{favicon_html}<script src="{pyodide_js_url}"></script>
 
 <!-- JavaScript libraries are loaded dynamically when imported -->
 
