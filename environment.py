@@ -228,6 +228,7 @@ def build_page(
     """
     import os
     import glob
+    import json
     import time
     from pathlib import Path
 
@@ -355,6 +356,35 @@ def build_page(
                 rel_path = os.path.relpath(os.path.join(root, file), ".")
                 asset_files.append(rel_path)
 
+    # Bundle every Python source into one file.
+    #
+    # Fetched individually, each module is its own HTTP round trip — a project
+    # of a hundred files spends a hundred latencies before a line of Python
+    # runs, which is invisible on localhost and ruinous over any real network.
+    # One request instead removes that term entirely, and the combined text
+    # compresses far better than the same bytes split a hundred ways.
+    #
+    # The page falls back to per-file fetching if the bundle is missing, so an
+    # output directory built by an older version still works.
+    source_bundle = "python_sources.json"
+    bundle = {}
+    for path in list(python_files) + list(antioch_files):
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                bundle[path] = handle.read()
+        except Exception as e:
+            print(f"Warning: could not bundle {path}: {e}")
+
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, source_bundle), "w",
+                  encoding="utf-8") as handle:
+            json.dump(bundle, handle, separators=(",", ":"))
+        print(f"Bundled {len(bundle)} Python files into {source_bundle}")
+    except Exception as e:
+        print(f"Warning: could not write the source bundle: {e}")
+        source_bundle = ""
+
     # Determine Pyodide source URLs
     if use_cdn_pyodide:
         pyodide_js_url = f"https://cdn.jsdelivr.net/pyodide/v{pyodide_version}/full/pyodide.js"
@@ -471,22 +501,67 @@ async function initializeApp() {{
         }}
 
         // --- Load files into FS ---
+        const sourceBundle = '{source_bundle}';
+
+        // Fetch concurrently. One `await` per file means one network round
+        // trip per file, in series — invisible on localhost, and seconds of
+        // dead time on any connection with real latency.
+        const FETCH_CONCURRENCY = 12;
+
         async function loadFiles(list, label){{
-            console.log(`Loading ${{label}} files:`, list);
-            for(const f of list){{
-                try {{
-                    const content = await fetch(f + '?v=' + cacheBuster).then(r=>r.text());
-                    pyodide.FS.writeFile("/"+f, content);
-                    console.log(`✓ Loaded ${{f}}`);
-                }} catch(e){{
-                    console.warn(`✗ Failed to load ${{f}}:`, e);
+            let loaded = 0;
+            for(let start = 0; start < list.length; start += FETCH_CONCURRENCY){{
+                const batch = list.slice(start, start + FETCH_CONCURRENCY);
+                const fetched = await Promise.all(batch.map(async (f) => {{
+                    try {{
+                        const response = await fetch(f + '?v=' + cacheBuster);
+                        if(!response.ok) throw new Error('HTTP ' + response.status);
+                        return [f, await response.text()];
+                    }} catch(e){{
+                        console.warn(`✗ Failed to load ${{f}}:`, e);
+                        return null;
+                    }}
+                }}));
+                // Written in list order even though they arrived in any order.
+                for(const entry of fetched){{
+                    if(!entry) continue;
+                    pyodide.FS.writeFile("/"+entry[0], entry[1]);
+                    loaded++;
                 }}
+            }}
+            console.log(`✓ Loaded ${{loaded}}/${{list.length}} ${{label}} files`);
+        }}
+
+        // One request for every Python source, rather than one per file.
+        async function loadSourceBundle(){{
+            if(!sourceBundle) return null;
+            try {{
+                const response = await fetch(sourceBundle + '?v=' + cacheBuster);
+                if(!response.ok) throw new Error('HTTP ' + response.status);
+                return await response.json();
+            }} catch(e){{
+                console.warn('Source bundle unavailable, fetching files individually:', e);
+                return null;
             }}
         }}
 
         // Load all Python files
-        await loadFiles(antiochFiles, 'antioch');
-        await loadFiles(pythonFiles, 'scripts');
+        const bundledSources = await loadSourceBundle();
+        if(bundledSources){{
+            let written = 0;
+            for(const [path, content] of Object.entries(bundledSources)){{
+                try {{
+                    pyodide.FS.writeFile("/"+path, content);
+                    written++;
+                }} catch(e){{
+                    console.warn(`✗ Failed to write ${{path}}:`, e);
+                }}
+            }}
+            console.log(`✓ Loaded ${{written}} Python files from ${{sourceBundle}}`);
+        }} else {{
+            await loadFiles(antiochFiles, 'antioch');
+            await loadFiles(pythonFiles, 'scripts');
+        }}
         await loadFiles(assetFiles, 'assets');
 
         // --- Setup Python path ---
@@ -666,22 +741,67 @@ async function initializeApp() {{
         }}
 
         // --- Load files into FS ---
+        const sourceBundle = '{source_bundle}';
+
+        // Fetch concurrently. One `await` per file means one network round
+        // trip per file, in series — invisible on localhost, and seconds of
+        // dead time on any connection with real latency.
+        const FETCH_CONCURRENCY = 12;
+
         async function loadFiles(list, label){{
-            console.log(`Loading ${{label}} files:`, list);
-            for(const f of list){{
-                try {{
-                    const content = await fetch(f + '?v=' + cacheBuster).then(r=>r.text());
-                    pyodide.FS.writeFile("/"+f, content);
-                    console.log(`✓ Loaded ${{f}}`);
-                }} catch(e){{
-                    console.warn(`✗ Failed to load ${{f}}:`, e);
+            let loaded = 0;
+            for(let start = 0; start < list.length; start += FETCH_CONCURRENCY){{
+                const batch = list.slice(start, start + FETCH_CONCURRENCY);
+                const fetched = await Promise.all(batch.map(async (f) => {{
+                    try {{
+                        const response = await fetch(f + '?v=' + cacheBuster);
+                        if(!response.ok) throw new Error('HTTP ' + response.status);
+                        return [f, await response.text()];
+                    }} catch(e){{
+                        console.warn(`✗ Failed to load ${{f}}:`, e);
+                        return null;
+                    }}
+                }}));
+                // Written in list order even though they arrived in any order.
+                for(const entry of fetched){{
+                    if(!entry) continue;
+                    pyodide.FS.writeFile("/"+entry[0], entry[1]);
+                    loaded++;
                 }}
+            }}
+            console.log(`✓ Loaded ${{loaded}}/${{list.length}} ${{label}} files`);
+        }}
+
+        // One request for every Python source, rather than one per file.
+        async function loadSourceBundle(){{
+            if(!sourceBundle) return null;
+            try {{
+                const response = await fetch(sourceBundle + '?v=' + cacheBuster);
+                if(!response.ok) throw new Error('HTTP ' + response.status);
+                return await response.json();
+            }} catch(e){{
+                console.warn('Source bundle unavailable, fetching files individually:', e);
+                return null;
             }}
         }}
 
         // Load all Python files
-        await loadFiles(antiochFiles, 'antioch');
-        await loadFiles(pythonFiles, 'scripts');
+        const bundledSources = await loadSourceBundle();
+        if(bundledSources){{
+            let written = 0;
+            for(const [path, content] of Object.entries(bundledSources)){{
+                try {{
+                    pyodide.FS.writeFile("/"+path, content);
+                    written++;
+                }} catch(e){{
+                    console.warn(`✗ Failed to write ${{path}}:`, e);
+                }}
+            }}
+            console.log(`✓ Loaded ${{written}} Python files from ${{sourceBundle}}`);
+        }} else {{
+            await loadFiles(antiochFiles, 'antioch');
+            await loadFiles(pythonFiles, 'scripts');
+        }}
         await loadFiles(assetFiles, 'assets');
 
         // --- Setup Python path ---
@@ -900,22 +1020,67 @@ async function initializeApp() {{
         }}
 
         // --- Load files into FS ---
+        const sourceBundle = '{source_bundle}';
+
+        // Fetch concurrently. One `await` per file means one network round
+        // trip per file, in series — invisible on localhost, and seconds of
+        // dead time on any connection with real latency.
+        const FETCH_CONCURRENCY = 12;
+
         async function loadFiles(list, label){{
-            console.log(`Loading ${{label}} files:`, list);
-            for(const f of list){{
-                try {{
-                    const content = await fetch(f + '?v=' + cacheBuster).then(r=>r.text());
-                    pyodide.FS.writeFile("/"+f, content);
-                    console.log(`✓ Loaded ${{f}}`);
-                }} catch(e){{
-                    console.warn(`✗ Failed to load ${{f}}:`, e);
+            let loaded = 0;
+            for(let start = 0; start < list.length; start += FETCH_CONCURRENCY){{
+                const batch = list.slice(start, start + FETCH_CONCURRENCY);
+                const fetched = await Promise.all(batch.map(async (f) => {{
+                    try {{
+                        const response = await fetch(f + '?v=' + cacheBuster);
+                        if(!response.ok) throw new Error('HTTP ' + response.status);
+                        return [f, await response.text()];
+                    }} catch(e){{
+                        console.warn(`✗ Failed to load ${{f}}:`, e);
+                        return null;
+                    }}
+                }}));
+                // Written in list order even though they arrived in any order.
+                for(const entry of fetched){{
+                    if(!entry) continue;
+                    pyodide.FS.writeFile("/"+entry[0], entry[1]);
+                    loaded++;
                 }}
+            }}
+            console.log(`✓ Loaded ${{loaded}}/${{list.length}} ${{label}} files`);
+        }}
+
+        // One request for every Python source, rather than one per file.
+        async function loadSourceBundle(){{
+            if(!sourceBundle) return null;
+            try {{
+                const response = await fetch(sourceBundle + '?v=' + cacheBuster);
+                if(!response.ok) throw new Error('HTTP ' + response.status);
+                return await response.json();
+            }} catch(e){{
+                console.warn('Source bundle unavailable, fetching files individually:', e);
+                return null;
             }}
         }}
 
         // Load all Python files
-        await loadFiles(antiochFiles, 'antioch');
-        await loadFiles(pythonFiles, 'scripts');
+        const bundledSources = await loadSourceBundle();
+        if(bundledSources){{
+            let written = 0;
+            for(const [path, content] of Object.entries(bundledSources)){{
+                try {{
+                    pyodide.FS.writeFile("/"+path, content);
+                    written++;
+                }} catch(e){{
+                    console.warn(`✗ Failed to write ${{path}}:`, e);
+                }}
+            }}
+            console.log(`✓ Loaded ${{written}} Python files from ${{sourceBundle}}`);
+        }} else {{
+            await loadFiles(antiochFiles, 'antioch');
+            await loadFiles(pythonFiles, 'scripts');
+        }}
         await loadFiles(assetFiles, 'assets');
 
         // --- Setup Python path ---
