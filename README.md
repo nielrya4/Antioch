@@ -881,7 +881,8 @@ This command:
 
 **What stays unchanged:**
 - Your projects and configurations
-- Project-specific `antioch/` directories (you'll need to run `antioch build` to use the updated framework)
+- Project-specific `antioch/` directories. A build uses the project's own copy when it has one, so to move a
+  project to the updated framework delete its `antioch/` folder and run `antioch env`, then `antioch build`
 
 After updating, rebuild your projects to use the new framework:
 
@@ -968,6 +969,11 @@ auto_open = true              # Automatically open browser when running
 - `favicon` - Browser tab icon. Accepts an emoji (`"🏛️"`, embedded as an inline SVG so no image file is
   needed), a path (`"assets/favicon.png"` — files outside `assets/` and the scripts folder are copied
   next to `index.html`), or an absolute URL / data URI
+- `snapshot` - Keep a memory snapshot of the Python interpreter in the browser (IndexedDB) and restore it on
+  later visits instead of booting from scratch (default: `true`). Repeat visits start roughly twice as fast.
+  The snapshot is a bare interpreter, so it is shared by every Antioch app on the same origin. It is saved
+  in the background after the first visit finishes loading, and the page boots normally whenever a snapshot
+  is missing, unusable, or the browser has no IndexedDB (e.g. some private windows). Set `false` to turn it off.
 
 #### [dependencies]
 
@@ -1363,61 +1369,54 @@ When you run `antioch build`:
 2. **Copy Antioch Library** - Copy `antioch/` to `output/antioch/`
 3. **Copy Scripts** - Copy `scripts/` to `output/scripts/`
 4. **Copy Assets** - Copy `assets/` to `output/assets/`
-5. **Generate HTML** - Create `output/index.html` with:
-   - Pyodide loader (CDN or local)
-   - Package installation code (micropip)
-   - Python execution environment
-   - Your application entry point
+5. **Bundle Sources** - Write `antioch_sources.json` (the framework) and `python_sources.json` (your scripts)
+6. **Generate HTML** - Create `output/index.html`: your splash screen plus a JSON config block and the
+   boot loader, `antioch/boot.js`
 
 ### Generated HTML Structure
 
-The `output/index.html` file contains:
+`output/index.html` is a thin shell. The boot logic lives in one file, `antioch/boot.js`, and the page
+only tells it what to load:
 
 ```html
 <!DOCTYPE html>
 <html>
 <head>
     <title>Your Antioch App</title>
-    <link rel="stylesheet" href="assets/styles.css">
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.js"></script>
+    <script type="application/json" id="antioch-boot">{"pyodide": {...}, "bundles": [...], "assets": {...}, ...}</script>
+    <script src="antioch/boot.js?v=4ead4677bc"></script>
 </head>
 <body>
-    <div id="loading">Loading Python runtime...</div>
-
-    <!-- Pyodide loader script -->
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.js"></script>
-
-    <script>
-        async function main() {
-            // Initialize Pyodide
-            let pyodide = await loadPyodide();
-
-            // Install packages via micropip
-            await pyodide.loadPackage("micropip");
-            const micropip = pyodide.pyimport("micropip");
-            await micropip.install(["numpy", "pandas"]);
-
-            // Mount virtual filesystem
-            pyodide.FS.mkdirTree('/scripts');
-            pyodide.FS.mkdirTree('/antioch');
-
-            // Load your Python code
-            await pyodide.runPythonAsync(`
-                import sys
-                sys.path.insert(0, '/scripts')
-                sys.path.insert(0, '/')
-
-                from scripts.main import main
-                main()
-            `);
-
-            document.getElementById('loading').style.display = 'none';
-        }
-
-        main();
-    </script>
+    <div id="loading">Loading Antioch Library...</div>
+    <div id="content"></div>
 </body>
 </html>
 ```
+
+### How the Page Boots
+
+`boot.js` overlaps the slow steps rather than running them one after another:
+
+```
+interpreter + Pyodide packages ─┐
+Python source bundles ──────────┼─> write the virtual filesystem -> install PyPI packages -> main.py
+assets ─────────────────────────┘
+```
+
+Your `main.py` still waits for the page to finish parsing, since it talks to the DOM.
+
+### Caching
+
+Everything the build produces is versioned by a hash of its content (`?v=...`), not by build time. Rebuilding
+without changing a file leaves its URL the same, so visitors keep their cached copy:
+
+- `antioch_sources.json` (large, rarely changes) and `python_sources.json` (your code) are separate files, so
+  deploying a change to your app does not make anyone re-download the framework
+- each asset in `assets/` is versioned on its own
+- Pyodide and its packages come from versioned CDN URLs that browsers cache for a year
+
+`antioch run` sends `Cache-Control: no-cache`, so a rebuild always shows up on reload.
 
 ### Build Customization
 

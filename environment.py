@@ -1,3 +1,6 @@
+import os
+
+
 def init_environment(output_folder: str, scripts_folder: str = "scripts", use_cdn_pyodide: bool = False, antioch_source: str = None) -> str:
     """Setup antioch environment by copying necessary files to output folder.
 
@@ -187,6 +190,37 @@ def _strip_icon_links(head_html: str) -> str:
         "", head_html, flags=re.IGNORECASE)
 
 
+def _posix(path: str) -> str:
+    """A path with forward slashes, as the virtual filesystem and URLs use."""
+    return path.replace(os.sep, "/")
+
+
+def _digest(data) -> str:
+    """A short content hash, used to version URLs."""
+    import hashlib
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return hashlib.sha1(data).hexdigest()[:10]
+
+
+def _read_source(sources: dict, key: str, path: str) -> None:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            sources[key] = handle.read()
+    except Exception as e:
+        print(f"Warning: could not bundle {path}: {e}")
+
+
+def _write_bundle(output_dir: str, name: str, sources: dict) -> str:
+    """Write a source bundle and return its content-versioned URL."""
+    import json
+    text = json.dumps(sources, separators=(",", ":"))
+    with open(os.path.join(output_dir, name), "w", encoding="utf-8") as handle:
+        handle.write(text)
+    print(f"Bundled {len(sources)} Python files into {name}")
+    return f"{name}?v={_digest(text)}"
+
+
 def build_page(
         filename: str,
         scripts_folder: str = "scripts",
@@ -200,7 +234,8 @@ def build_page(
         splash_file: str = None,
         title: str = None,
         default_title: str = DEFAULT_PAGE_TITLE,
-        favicon: str = None
+        favicon: str = None,
+        snapshot: bool = True
 ) -> str:
     """
     Generate Pyodide-powered HTML app for antioch library.
@@ -223,17 +258,18 @@ def build_page(
         favicon: Emoji, URL/data URI, or path to an image file. Overrides an
                  icon set by the splash screen.
 
+    The Python sources, assets and boot loader (antioch/boot.js) are versioned
+    by content hash. `snapshot` lets the page keep a memory snapshot of the
+    interpreter in IndexedDB and restore it on later visits instead of booting
+    from scratch; it falls back to a normal boot if that is not possible.
+
     The page title is taken from the first of: `title`, the splash screen's
     <title>, `default_title`.
     """
     import os
     import glob
     import json
-    import time
     from pathlib import Path
-
-    # Generate cache-busting timestamp
-    cache_buster = int(time.time() * 1000)  # milliseconds since epoch
 
     # Generate splash screen HTML
     body_content = None
@@ -328,70 +364,106 @@ def build_page(
         if favicon else (None, None)
     favicon_html = _favicon_tags(favicon_href, favicon_mime)
 
-    # Get all Python files from scripts folder
-    python_files = []
+    # The framework is served from the output folder, so that copy is the one
+    # to bundle and to take boot.js from; fall back to a local checkout if the
+    # environment has not been initialised.
+    framework_dir = next((d for d in (os.path.join(output_dir, "antioch"), "antioch")
+                          if os.path.isdir(d)), None)
+    if framework_dir is None:
+        raise FileNotFoundError(
+            "antioch library not found. Run init_environment() (or 'antioch env') first")
+    boot_js = os.path.join(framework_dir, "boot.js")
+    if not os.path.exists(boot_js):
+        raise FileNotFoundError(
+            f"{boot_js} not found: this project's antioch/ folder predates the boot loader. "
+            "Delete the antioch/ folder and run 'antioch env' to copy in the current framework")
+
+    # Application sources: the scripts folder, or loose .py files beside the build.
+    app_sources = {}
     if os.path.exists(scripts_folder):
-        for root, dirs, files in os.walk(scripts_folder):
-            for file in files:
-                if file.endswith(".py"):
-                    rel_path = os.path.relpath(os.path.join(root, file), ".")
-                    python_files.append(rel_path)
+        app_files = [os.path.join(root, f)
+                     for root, _dirs, files in os.walk(scripts_folder)
+                     for f in files if f.endswith(".py")]
     else:
-        # Fall back to current directory if scripts folder doesn't exist
-        python_files = glob.glob("*.py")
+        app_files = glob.glob("*.py")
+    for path in sorted(app_files):
+        _read_source(app_sources, _posix(os.path.relpath(path, ".")), path)
 
-    # Get all Python files from antioch library
-    antioch_files = []
-    if os.path.exists("antioch"):
-        for root, dirs, files in os.walk("antioch"):
-            for file in files:
-                if file.endswith(".py"):
-                    rel_path = os.path.relpath(os.path.join(root, file), ".")
-                    antioch_files.append(rel_path)
+    # Framework sources, keyed as they appear in the virtual filesystem.
+    framework_sources = {}
+    for root, _dirs, files in os.walk(framework_dir):
+        for f in sorted(files):
+            if f.endswith(".py"):
+                path = os.path.join(root, f)
+                key = "antioch/" + _posix(os.path.relpath(path, framework_dir))
+                _read_source(framework_sources, key, path)
 
-    asset_files = []
+    # Assets are versioned by content, so an unchanged file stays cached
+    # across deploys.
+    asset_versions = {}
     if os.path.exists("assets"):
-        for root, dirs, files in os.walk("assets"):
-            for file in files:
-                rel_path = os.path.relpath(os.path.join(root, file), ".")
-                asset_files.append(rel_path)
+        for root, _dirs, files in os.walk("assets"):
+            for f in files:
+                path = os.path.join(root, f)
+                with open(path, "rb") as handle:
+                    asset_versions[_posix(os.path.relpath(path, "."))] = _digest(handle.read())
 
-    # Bundle every Python source into one file.
-    #
-    # Fetched individually, each module is its own HTTP round trip — a project
-    # of a hundred files spends a hundred latencies before a line of Python
-    # runs, which is invisible on localhost and ruinous over any real network.
-    # One request instead removes that term entirely, and the combined text
-    # compresses far better than the same bytes split a hundred ways.
-    #
-    # The page falls back to per-file fetching if the bundle is missing, so an
-    # output directory built by an older version still works.
-    source_bundle = "python_sources.json"
-    bundle = {}
-    for path in list(python_files) + list(antioch_files):
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                bundle[path] = handle.read()
-        except Exception as e:
-            print(f"Warning: could not bundle {path}: {e}")
+    # Every Python source travels in two bundles, not one request per file: a
+    # hundred files would spend a hundred round trips before a line of Python
+    # runs, invisible on localhost and ruinous over a real network. The
+    # framework and the app are separate so that a deploy of the app alone
+    # leaves the (much larger, rarely changing) framework bundle cached.
+    # Each URL carries a hash of its content, so a changed bundle gets a new
+    # URL and an unchanged one never has to be fetched again.
+    bundles = [
+        _write_bundle(output_dir, "antioch_sources.json", framework_sources),
+        _write_bundle(output_dir, "python_sources.json", app_sources),
+    ]
 
-    try:
-        os.makedirs(output_dir, exist_ok=True)
-        with open(os.path.join(output_dir, source_bundle), "w",
-                  encoding="utf-8") as handle:
-            json.dump(bundle, handle, separators=(",", ":"))
-        print(f"Bundled {len(bundle)} Python files into {source_bundle}")
-    except Exception as e:
-        print(f"Warning: could not write the source bundle: {e}")
-        source_bundle = ""
+    main_script = next((c for c in (f"{_posix(os.path.normpath(scripts_folder))}/main.py", "main.py")
+                        if c in app_sources), None)
 
     # Determine Pyodide source URLs
     if use_cdn_pyodide:
         pyodide_js_url = f"https://cdn.jsdelivr.net/pyodide/v{pyodide_version}/full/pyodide.js"
         pyodide_index_url = f"https://cdn.jsdelivr.net/pyodide/v{pyodide_version}/full/"
+        pyodide_id = pyodide_version
     else:
         pyodide_js_url = "pyodide/pyodide.js"
         pyodide_index_url = "./pyodide/"
+        # A snapshot only restores into the exact build that made it, and a
+        # local runtime can be swapped without the config changing.
+        lock = os.path.join(output_dir, "pyodide", "pyodide-lock.json")
+        pyodide_id = "local"
+        if os.path.exists(lock):
+            with open(lock, "rb") as handle:
+                pyodide_id = "local-" + _digest(handle.read())
+
+    with open(boot_js, "rb") as handle:
+        boot_js_url = f"antioch/boot.js?v={_digest(handle.read())}"
+
+    boot_config = {
+        "pyodide": {
+            "id": pyodide_id,
+            "jsURL": pyodide_js_url,
+            "indexURL": pyodide_index_url,
+            "packages": list(pyodide_packages or ["micropip"]),
+        },
+        "snapshot": bool(snapshot),
+        "bundles": [{"url": url} for url in bundles],
+        "assets": asset_versions,
+        "mainScript": main_script,
+        "extraDirs": list(additional_directories or []),
+        "localPackages": list(local_packages or []),
+        "pypiPackages": list(pypi_packages or []),
+    }
+    # "<" is escaped so no value can close the script element early.
+    boot_config_json = json.dumps(boot_config, separators=(",", ":")).replace("<", "\\u003c")
+    boot_head = (
+        f'<script src="{pyodide_js_url}"></script>\n'
+        f'<script type="application/json" id="antioch-boot">{boot_config_json}</script>\n'
+        f'<script src="{boot_js_url}"></script>'
+    )
 
     # Build the body content
     if body_content:
@@ -431,237 +503,11 @@ def build_page(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{page_title}</title>
-{favicon_html}<script src="{pyodide_js_url}"></script>
+{favicon_html}{boot_head}
 {head_extras}
 </head>
 {body_tag}
 {custom_body_content}
-<script>
-async function initializeApp() {{
-    try {{
-        // Cache-busting timestamp - prevents browser from serving stale files
-        const cacheBuster = {cache_buster};
-
-        // Initialize Pyodide
-        const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
-
-        // Load Pyodide packages first
-        const pyodidePackages = {pyodide_packages or ['micropip']};
-        console.log('Loading Pyodide packages:', pyodidePackages);
-        await pyodide.loadPackage(pyodidePackages);
-
-        const pythonFiles = {python_files};
-        const assetFiles = {asset_files};
-        const antiochFiles = {antioch_files};
-        const extraDirs = {additional_directories or []};
-        const localPkgs = {local_packages or []};
-        const pypiPkgs = {pypi_packages or []};
-
-        // --- Create directories in Pyodide FS ---
-        console.log('Creating directories in Pyodide filesystem...');
-
-        // Helper function to create directories recursively
-        function createDirectoryRecursive(path) {{
-            const parts = path.split('/').filter(p => p);
-            let currentPath = '';
-            for (const part of parts) {{
-                currentPath += '/' + part;
-                try {{
-                    pyodide.FS.mkdir(currentPath);
-                    console.log(`Created directory: ${{currentPath}}`);
-                }} catch (e) {{
-                    // Directory already exists, ignore
-                }}
-            }}
-        }}
-
-        // Create base directories
-        createDirectoryRecursive("/antioch");
-        createDirectoryRecursive("/antioch/macros");
-        createDirectoryRecursive("/scripts");
-        createDirectoryRecursive("/assets");
-
-        // Create all needed directories from Python files
-        const allFiles = [...pythonFiles, ...antiochFiles, ...assetFiles];
-        for (const file of allFiles) {{
-            const dirPath = file.substring(0, file.lastIndexOf('/'));
-            if (dirPath && !dirPath.includes('..')) {{
-                createDirectoryRecursive('/' + dirPath);
-            }}
-        }}
-
-        // Create additional directories
-        for(const d of extraDirs){{
-            try{{
-                pyodide.FS.mkdir(d);
-                console.log(`Created directory: ${{d}}`);
-            }}catch(e){{
-                console.warn(`Directory ${{d}} already exists or could not be created`);
-            }}
-        }}
-
-        // --- Load files into FS ---
-        const sourceBundle = '{source_bundle}';
-
-        // Fetch concurrently. One `await` per file means one network round
-        // trip per file, in series — invisible on localhost, and seconds of
-        // dead time on any connection with real latency.
-        const FETCH_CONCURRENCY = 12;
-
-        async function loadFiles(list, label){{
-            let loaded = 0;
-            for(let start = 0; start < list.length; start += FETCH_CONCURRENCY){{
-                const batch = list.slice(start, start + FETCH_CONCURRENCY);
-                const fetched = await Promise.all(batch.map(async (f) => {{
-                    try {{
-                        const response = await fetch(f + '?v=' + cacheBuster);
-                        if(!response.ok) throw new Error('HTTP ' + response.status);
-                        return [f, await response.text()];
-                    }} catch(e){{
-                        console.warn(`✗ Failed to load ${{f}}:`, e);
-                        return null;
-                    }}
-                }}));
-                // Written in list order even though they arrived in any order.
-                for(const entry of fetched){{
-                    if(!entry) continue;
-                    pyodide.FS.writeFile("/"+entry[0], entry[1]);
-                    loaded++;
-                }}
-            }}
-            console.log(`✓ Loaded ${{loaded}}/${{list.length}} ${{label}} files`);
-        }}
-
-        // One request for every Python source, rather than one per file.
-        async function loadSourceBundle(){{
-            if(!sourceBundle) return null;
-            try {{
-                const response = await fetch(sourceBundle + '?v=' + cacheBuster);
-                if(!response.ok) throw new Error('HTTP ' + response.status);
-                return await response.json();
-            }} catch(e){{
-                console.warn('Source bundle unavailable, fetching files individually:', e);
-                return null;
-            }}
-        }}
-
-        // Load all Python files
-        const bundledSources = await loadSourceBundle();
-        if(bundledSources){{
-            let written = 0;
-            for(const [path, content] of Object.entries(bundledSources)){{
-                try {{
-                    pyodide.FS.writeFile("/"+path, content);
-                    written++;
-                }} catch(e){{
-                    console.warn(`✗ Failed to write ${{path}}:`, e);
-                }}
-            }}
-            console.log(`✓ Loaded ${{written}} Python files from ${{sourceBundle}}`);
-        }} else {{
-            await loadFiles(antiochFiles, 'antioch');
-            await loadFiles(pythonFiles, 'scripts');
-        }}
-        await loadFiles(assetFiles, 'assets');
-
-        // --- Setup Python path ---
-        console.log('Setting up Python path...');
-        let pythonPathSetup = `
-import sys
-# Add core directories to Python path
-sys.path.insert(0, '/')
-sys.path.insert(0, '/antioch')
-sys.path.insert(0, '/antioch/macros')
-sys.path.insert(0, '/antioch/macros/canvas_macros')
-sys.path.insert(0, '/scripts')`;
-
-        // Add additional directories to Python path
-        for(const d of extraDirs){{
-            pythonPathSetup += `\\nsys.path.insert(0, '${{d}}')`;
-        }}
-
-        pythonPathSetup += `\\nprint('Python path updated with:', sys.path[:8])`;
-        await pyodide.runPython(pythonPathSetup);
-
-        // --- Install local packages ---
-        if(localPkgs.length > 0) {{
-            console.log('Installing local packages:', localPkgs);
-            for(const pkg of localPkgs){{
-                try {{
-                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
-                    console.log(`✓ Installed local package: ${{pkg}}`);
-                }} catch(e) {{
-                    console.warn(`✗ Failed to install local package ${{pkg}}:`, e);
-                }}
-            }}
-        }}
-
-        // --- Install PyPI packages ---
-        if(pypiPkgs.length > 0) {{
-            console.log('Installing PyPI packages:', pypiPkgs);
-            for(const pkg of pypiPkgs){{
-                try {{
-                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
-                    console.log(`✓ Installed PyPI package: ${{pkg}}`);
-                }} catch(e) {{
-                    console.warn(`✗ Failed to install PyPI package ${{pkg}}:`, e);
-                }}
-            }}
-        }}
-
-        // --- Execute main.py if exists ---
-        let mainScript = pythonFiles.includes('{scripts_folder}/main.py')
-                        ? '{scripts_folder}/main.py'
-                        : (pythonFiles.includes('main.py') ? 'main.py' : null);
-
-        if(mainScript){{
-            console.log(`Executing main script: ${{mainScript}}`);
-            const code = await fetch(mainScript + '?v=' + cacheBuster).then(r=>r.text());
-            await pyodide.runPythonAsync(code);
-            console.log(`✓ Executed ${{mainScript}}`);
-        }} else {{
-            console.log('No main.py found, skipping execution');
-        }}
-
-        // Hide loading and show content (if elements still exist)
-        const loadingEl = document.getElementById("loading");
-        const contentEl = document.getElementById("content");
-
-        if (loadingEl) {{
-            loadingEl.style.display = "none";
-        }}
-        if (contentEl) {{
-            contentEl.style.display = "block";
-        }}
-        console.log('🎉 Application loaded successfully!');
-
-    }} catch(err) {{
-        console.error('💥 Error loading application:', err);
-        const loadingEl = document.getElementById("loading");
-        if (loadingEl) {{
-            loadingEl.innerHTML =
-                `<div style="color:red; padding:20px;">
-                    <h3>Error loading application</h3>
-                    <p>${{err.message}}</p>
-                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
-                </div>`;
-        }} else {{
-            // If loading element doesn't exist, create error display in body
-            const errorDiv = document.createElement('div');
-            errorDiv.innerHTML =
-                `<div style="color:red; padding:20px;">
-                    <h3>Error loading application</h3>
-                    <p>${{err.message}}</p>
-                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
-                </div>`;
-            document.body.appendChild(errorDiv);
-        }}
-    }}
-}}
-
-// Start loading when page is ready
-window.addEventListener("DOMContentLoaded", initializeApp);
-</script>
 </body>
 </html>'''
         else:
@@ -672,236 +518,10 @@ window.addEventListener("DOMContentLoaded", initializeApp);
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{page_title}</title>
-{favicon_html}<script src="{pyodide_js_url}"></script>
+{favicon_html}{boot_head}
 </head>
 <body>
 {body_content}
-<script>
-async function initializeApp() {{
-    try {{
-        // Cache-busting timestamp - prevents browser from serving stale files
-        const cacheBuster = {cache_buster};
-
-        // Initialize Pyodide
-        const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
-
-        // Load Pyodide packages first
-        const pyodidePackages = {pyodide_packages or ['micropip']};
-        console.log('Loading Pyodide packages:', pyodidePackages);
-        await pyodide.loadPackage(pyodidePackages);
-
-        const pythonFiles = {python_files};
-        const assetFiles = {asset_files};
-        const antiochFiles = {antioch_files};
-        const extraDirs = {additional_directories or []};
-        const localPkgs = {local_packages or []};
-        const pypiPkgs = {pypi_packages or []};
-
-        // --- Create directories in Pyodide FS ---
-        console.log('Creating directories in Pyodide filesystem...');
-        
-        // Helper function to create directories recursively
-        function createDirectoryRecursive(path) {{
-            const parts = path.split('/').filter(p => p);
-            let currentPath = '';
-            for (const part of parts) {{
-                currentPath += '/' + part;
-                try {{
-                    pyodide.FS.mkdir(currentPath);
-                    console.log(`Created directory: ${{currentPath}}`);
-                }} catch (e) {{
-                    // Directory already exists, ignore
-                }}
-            }}
-        }}
-        
-        // Create base directories
-        createDirectoryRecursive("/antioch");
-        createDirectoryRecursive("/antioch/macros");
-        createDirectoryRecursive("/scripts");
-        createDirectoryRecursive("/assets");
-        
-        // Create all needed directories from Python files
-        const allFiles = [...pythonFiles, ...antiochFiles, ...assetFiles];
-        for (const file of allFiles) {{
-            const dirPath = file.substring(0, file.lastIndexOf('/'));
-            if (dirPath && !dirPath.includes('..')) {{
-                createDirectoryRecursive('/' + dirPath);
-            }}
-        }}
-
-        // Create additional directories
-        for(const d of extraDirs){{
-            try{{ 
-                pyodide.FS.mkdir(d); 
-                console.log(`Created directory: ${{d}}`);
-            }}catch(e){{ 
-                console.warn(`Directory ${{d}} already exists or could not be created`);
-            }}
-        }}
-
-        // --- Load files into FS ---
-        const sourceBundle = '{source_bundle}';
-
-        // Fetch concurrently. One `await` per file means one network round
-        // trip per file, in series — invisible on localhost, and seconds of
-        // dead time on any connection with real latency.
-        const FETCH_CONCURRENCY = 12;
-
-        async function loadFiles(list, label){{
-            let loaded = 0;
-            for(let start = 0; start < list.length; start += FETCH_CONCURRENCY){{
-                const batch = list.slice(start, start + FETCH_CONCURRENCY);
-                const fetched = await Promise.all(batch.map(async (f) => {{
-                    try {{
-                        const response = await fetch(f + '?v=' + cacheBuster);
-                        if(!response.ok) throw new Error('HTTP ' + response.status);
-                        return [f, await response.text()];
-                    }} catch(e){{
-                        console.warn(`✗ Failed to load ${{f}}:`, e);
-                        return null;
-                    }}
-                }}));
-                // Written in list order even though they arrived in any order.
-                for(const entry of fetched){{
-                    if(!entry) continue;
-                    pyodide.FS.writeFile("/"+entry[0], entry[1]);
-                    loaded++;
-                }}
-            }}
-            console.log(`✓ Loaded ${{loaded}}/${{list.length}} ${{label}} files`);
-        }}
-
-        // One request for every Python source, rather than one per file.
-        async function loadSourceBundle(){{
-            if(!sourceBundle) return null;
-            try {{
-                const response = await fetch(sourceBundle + '?v=' + cacheBuster);
-                if(!response.ok) throw new Error('HTTP ' + response.status);
-                return await response.json();
-            }} catch(e){{
-                console.warn('Source bundle unavailable, fetching files individually:', e);
-                return null;
-            }}
-        }}
-
-        // Load all Python files
-        const bundledSources = await loadSourceBundle();
-        if(bundledSources){{
-            let written = 0;
-            for(const [path, content] of Object.entries(bundledSources)){{
-                try {{
-                    pyodide.FS.writeFile("/"+path, content);
-                    written++;
-                }} catch(e){{
-                    console.warn(`✗ Failed to write ${{path}}:`, e);
-                }}
-            }}
-            console.log(`✓ Loaded ${{written}} Python files from ${{sourceBundle}}`);
-        }} else {{
-            await loadFiles(antiochFiles, 'antioch');
-            await loadFiles(pythonFiles, 'scripts');
-        }}
-        await loadFiles(assetFiles, 'assets');
-
-        // --- Setup Python path ---
-        console.log('Setting up Python path...');
-        let pythonPathSetup = `
-import sys
-# Add core directories to Python path
-sys.path.insert(0, '/')
-sys.path.insert(0, '/antioch')
-sys.path.insert(0, '/antioch/macros')
-sys.path.insert(0, '/antioch/macros/canvas_macros')
-sys.path.insert(0, '/scripts')`;
-
-        // Add additional directories to Python path
-        for(const d of extraDirs){{
-            pythonPathSetup += `\\nsys.path.insert(0, '${{d}}')`;
-        }}
-        
-        pythonPathSetup += `\\nprint('Python path updated with:', sys.path[:8])`;
-        await pyodide.runPython(pythonPathSetup);
-
-        // --- Install local packages ---
-        if(localPkgs.length > 0) {{
-            console.log('Installing local packages:', localPkgs);
-            for(const pkg of localPkgs){{
-                try {{
-                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`); 
-                    console.log(`✓ Installed local package: ${{pkg}}`);
-                }} catch(e) {{
-                    console.warn(`✗ Failed to install local package ${{pkg}}:`, e);
-                }}
-            }}
-        }}
-
-        // --- Install PyPI packages ---
-        if(pypiPkgs.length > 0) {{
-            console.log('Installing PyPI packages:', pypiPkgs);
-            for(const pkg of pypiPkgs){{
-                try {{
-                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`); 
-                    console.log(`✓ Installed PyPI package: ${{pkg}}`);
-                }} catch(e) {{
-                    console.warn(`✗ Failed to install PyPI package ${{pkg}}:`, e);
-                }}
-            }}
-        }}
-
-        // --- Execute main.py if exists ---
-        let mainScript = pythonFiles.includes('{scripts_folder}/main.py')
-                        ? '{scripts_folder}/main.py'
-                        : (pythonFiles.includes('main.py') ? 'main.py' : null);
-
-        if(mainScript){{
-            console.log(`Executing main script: ${{mainScript}}`);
-            const code = await fetch(mainScript + '?v=' + cacheBuster).then(r=>r.text());
-            await pyodide.runPythonAsync(code);
-            console.log(`✓ Executed ${{mainScript}}`);
-        }} else {{
-            console.log('No main.py found, skipping execution');
-        }}
-
-        // Hide loading and show content (if elements still exist)
-        const loadingEl = document.getElementById("loading");
-        const contentEl = document.getElementById("content");
-        
-        if (loadingEl) {{
-            loadingEl.style.display = "none";
-        }}
-        if (contentEl) {{
-            contentEl.style.display = "block";
-        }}
-        console.log('🎉 Application loaded successfully!');
-
-    }} catch(err) {{
-        console.error('💥 Error loading application:', err);
-        const loadingEl = document.getElementById("loading");
-        if (loadingEl) {{
-            loadingEl.innerHTML =
-                `<div style="color:red; padding:20px;">
-                    <h3>Error loading application</h3>
-                    <p>${{err.message}}</p>
-                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
-                </div>`;
-        }} else {{
-            // If loading element doesn't exist, create error display in body
-            const errorDiv = document.createElement('div');
-            errorDiv.innerHTML = 
-                `<div style="color:red; padding:20px;">
-                    <h3>Error loading application</h3>
-                    <p>${{err.message}}</p>
-                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
-                </div>`;
-            document.body.appendChild(errorDiv);
-        }}
-    }}
-}}
-
-// Start loading when page is ready
-window.addEventListener("DOMContentLoaded", initializeApp);
-</script>
 </body>
 </html>'''
     else:
@@ -912,7 +532,7 @@ window.addEventListener("DOMContentLoaded", initializeApp);
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{page_title}</title>
-{favicon_html}<script src="{pyodide_js_url}"></script>
+{favicon_html}{boot_head}
 
 <!-- JavaScript libraries are loaded dynamically when imported -->
 
@@ -954,233 +574,6 @@ body {{
     <p>Loading Antioch Library...</p>
 </div>
 <div id="content"></div>
-
-<script>
-async function initializeApp() {{
-    try {{
-        // Cache-busting timestamp - prevents browser from serving stale files
-        const cacheBuster = {cache_buster};
-
-        // Initialize Pyodide
-        const pyodide = await loadPyodide({{ indexURL: "{pyodide_index_url}" }});
-
-        // Load Pyodide packages first
-        const pyodidePackages = {pyodide_packages or ['micropip']};
-        console.log('Loading Pyodide packages:', pyodidePackages);
-        await pyodide.loadPackage(pyodidePackages);
-
-        const pythonFiles = {python_files};
-        const assetFiles = {asset_files};
-        const antiochFiles = {antioch_files};
-        const extraDirs = {additional_directories or []};
-        const localPkgs = {local_packages or []};
-        const pypiPkgs = {pypi_packages or []};
-
-        // --- Create directories in Pyodide FS ---
-        console.log('Creating directories in Pyodide filesystem...');
-
-        // Helper function to create directories recursively
-        function createDirectoryRecursive(path) {{
-            const parts = path.split('/').filter(p => p);
-            let currentPath = '';
-            for (const part of parts) {{
-                currentPath += '/' + part;
-                try {{
-                    pyodide.FS.mkdir(currentPath);
-                    console.log(`Created directory: ${{currentPath}}`);
-                }} catch (e) {{
-                    // Directory already exists, ignore
-                }}
-            }}
-        }}
-
-        // Create base directories
-        createDirectoryRecursive("/antioch");
-        createDirectoryRecursive("/antioch/macros");
-        createDirectoryRecursive("/scripts");
-        createDirectoryRecursive("/assets");
-
-        // Create all needed directories from Python files
-        const allFiles = [...pythonFiles, ...antiochFiles, ...assetFiles];
-        for (const file of allFiles) {{
-            const dirPath = file.substring(0, file.lastIndexOf('/'));
-            if (dirPath && !dirPath.includes('..')) {{
-                createDirectoryRecursive('/' + dirPath);
-            }}
-        }}
-
-        // Create additional directories
-        for(const d of extraDirs){{
-            try{{
-                pyodide.FS.mkdir(d);
-                console.log(`Created directory: ${{d}}`);
-            }}catch(e){{
-                console.warn(`Directory ${{d}} already exists or could not be created`);
-            }}
-        }}
-
-        // --- Load files into FS ---
-        const sourceBundle = '{source_bundle}';
-
-        // Fetch concurrently. One `await` per file means one network round
-        // trip per file, in series — invisible on localhost, and seconds of
-        // dead time on any connection with real latency.
-        const FETCH_CONCURRENCY = 12;
-
-        async function loadFiles(list, label){{
-            let loaded = 0;
-            for(let start = 0; start < list.length; start += FETCH_CONCURRENCY){{
-                const batch = list.slice(start, start + FETCH_CONCURRENCY);
-                const fetched = await Promise.all(batch.map(async (f) => {{
-                    try {{
-                        const response = await fetch(f + '?v=' + cacheBuster);
-                        if(!response.ok) throw new Error('HTTP ' + response.status);
-                        return [f, await response.text()];
-                    }} catch(e){{
-                        console.warn(`✗ Failed to load ${{f}}:`, e);
-                        return null;
-                    }}
-                }}));
-                // Written in list order even though they arrived in any order.
-                for(const entry of fetched){{
-                    if(!entry) continue;
-                    pyodide.FS.writeFile("/"+entry[0], entry[1]);
-                    loaded++;
-                }}
-            }}
-            console.log(`✓ Loaded ${{loaded}}/${{list.length}} ${{label}} files`);
-        }}
-
-        // One request for every Python source, rather than one per file.
-        async function loadSourceBundle(){{
-            if(!sourceBundle) return null;
-            try {{
-                const response = await fetch(sourceBundle + '?v=' + cacheBuster);
-                if(!response.ok) throw new Error('HTTP ' + response.status);
-                return await response.json();
-            }} catch(e){{
-                console.warn('Source bundle unavailable, fetching files individually:', e);
-                return null;
-            }}
-        }}
-
-        // Load all Python files
-        const bundledSources = await loadSourceBundle();
-        if(bundledSources){{
-            let written = 0;
-            for(const [path, content] of Object.entries(bundledSources)){{
-                try {{
-                    pyodide.FS.writeFile("/"+path, content);
-                    written++;
-                }} catch(e){{
-                    console.warn(`✗ Failed to write ${{path}}:`, e);
-                }}
-            }}
-            console.log(`✓ Loaded ${{written}} Python files from ${{sourceBundle}}`);
-        }} else {{
-            await loadFiles(antiochFiles, 'antioch');
-            await loadFiles(pythonFiles, 'scripts');
-        }}
-        await loadFiles(assetFiles, 'assets');
-
-        // --- Setup Python path ---
-        console.log('Setting up Python path...');
-        let pythonPathSetup = `
-import sys
-# Add core directories to Python path
-sys.path.insert(0, '/')
-sys.path.insert(0, '/antioch')
-sys.path.insert(0, '/antioch/macros')
-sys.path.insert(0, '/antioch/macros/canvas_macros')
-sys.path.insert(0, '/scripts')`;
-
-        // Add additional directories to Python path
-        for(const d of extraDirs){{
-            pythonPathSetup += `\\nsys.path.insert(0, '${{d}}')`;
-        }}
-
-        pythonPathSetup += `\\nprint('Python path updated with:', sys.path[:8])`;
-        await pyodide.runPython(pythonPathSetup);
-
-        // --- Install local packages ---
-        if(localPkgs.length > 0) {{
-            console.log('Installing local packages:', localPkgs);
-            for(const pkg of localPkgs){{
-                try {{
-                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
-                    console.log(`✓ Installed local package: ${{pkg}}`);
-                }} catch(e) {{
-                    console.warn(`✗ Failed to install local package ${{pkg}}:`, e);
-                }}
-            }}
-        }}
-
-        // --- Install PyPI packages ---
-        if(pypiPkgs.length > 0) {{
-            console.log('Installing PyPI packages:', pypiPkgs);
-            for(const pkg of pypiPkgs){{
-                try {{
-                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${{pkg}}")`);
-                    console.log(`✓ Installed PyPI package: ${{pkg}}`);
-                }} catch(e) {{
-                    console.warn(`✗ Failed to install PyPI package ${{pkg}}:`, e);
-                }}
-            }}
-        }}
-
-        // --- Execute main.py if exists ---
-        let mainScript = pythonFiles.includes('{scripts_folder}/main.py')
-                        ? '{scripts_folder}/main.py'
-                        : (pythonFiles.includes('main.py') ? 'main.py' : null);
-
-        if(mainScript){{
-            console.log(`Executing main script: ${{mainScript}}`);
-            const code = await fetch(mainScript + '?v=' + cacheBuster).then(r=>r.text());
-            await pyodide.runPythonAsync(code);
-            console.log(`✓ Executed ${{mainScript}}`);
-        }} else {{
-            console.log('No main.py found, skipping execution');
-        }}
-
-        // Hide loading and show content (if elements still exist)
-        const loadingEl = document.getElementById("loading");
-        const contentEl = document.getElementById("content");
-
-        if (loadingEl) {{
-            loadingEl.style.display = "none";
-        }}
-        if (contentEl) {{
-            contentEl.style.display = "block";
-        }}
-        console.log('🎉 Application loaded successfully!');
-
-    }} catch(err) {{
-        console.error('💥 Error loading application:', err);
-        const loadingEl = document.getElementById("loading");
-        if (loadingEl) {{
-            loadingEl.innerHTML =
-                `<div style="color:red; padding:20px;">
-                    <h3>Error loading application</h3>
-                    <p>${{err.message}}</p>
-                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
-                </div>`;
-        }} else {{
-            // If loading element doesn't exist, create error display in body
-            const errorDiv = document.createElement('div');
-            errorDiv.innerHTML =
-                `<div style="color:red; padding:20px;">
-                    <h3>Error loading application</h3>
-                    <p>${{err.message}}</p>
-                    <details><summary>Stack trace</summary><pre>${{err.stack}}</pre></details>
-                </div>`;
-            document.body.appendChild(errorDiv);
-        }}
-    }}
-}}
-
-// Start loading when page is ready
-window.addEventListener("DOMContentLoaded", initializeApp);
-</script>
 </body>
 </html>'''
 

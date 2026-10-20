@@ -125,6 +125,7 @@ pyodide_version = "0.29.3"  # Used when pyodide_source = "cdn"
 splash_file = ""  # Optional: .html or .py file rendered as a static splash screen while Pyodide loads
 title = ""  # Optional: browser tab title. Falls back to the splash screen's <title>, then project.name
 favicon = ""  # Optional: emoji (e.g. "🏛️"), path (e.g. "assets/favicon.png"), or URL
+snapshot = true  # Keep an interpreter snapshot in the browser so repeat visits start faster
 
 [dependencies]
 # Pyodide built-in packages to load
@@ -346,19 +347,24 @@ button:hover {
         print(f"PyPI packages: {pypi_packages}")
         print(f"Local packages: {local_packages}")
 
-        result = build_page(
-            filename=f"{output_dir}/index.html",
-            scripts_folder=scripts_dir,
-            pyodide_packages=pyodide_packages,
-            local_packages=local_packages,
-            pypi_packages=pypi_packages,
-            use_cdn_pyodide=use_cdn,
-            pyodide_version=pyodide_version,
-            splash_file=build_config.get('splash_file') or None,
-            title=build_config.get('title') or None,
-            default_title=self.config.get('project', {}).get('name') or 'Antioch App',
-            favicon=build_config.get('favicon') or None
-        )
+        try:
+            result = build_page(
+                filename=f"{output_dir}/index.html",
+                scripts_folder=scripts_dir,
+                pyodide_packages=pyodide_packages,
+                local_packages=local_packages,
+                pypi_packages=pypi_packages,
+                use_cdn_pyodide=use_cdn,
+                pyodide_version=pyodide_version,
+                splash_file=build_config.get('splash_file') or None,
+                title=build_config.get('title') or None,
+                default_title=self.config.get('project', {}).get('name') or 'Antioch App',
+                favicon=build_config.get('favicon') or None,
+                snapshot=bool(build_config.get('snapshot', True))
+            )
+        except FileNotFoundError as e:
+            print(f"\n❌ {e}")
+            sys.exit(1)
 
         print(result)
         print("\n✅ Build complete!")
@@ -426,7 +432,12 @@ button:hover {
         os.chdir(output_dir)
 
         # Create server
-        Handler = http.server.SimpleHTTPRequestHandler
+        class Handler(http.server.SimpleHTTPRequestHandler):
+            # Revalidate on every request so a rebuild shows up on reload;
+            # without this the browser may keep serving the previous index.html.
+            def end_headers(self):
+                self.send_header("Cache-Control", "no-cache")
+                super().end_headers()
 
         try:
             with socketserver.TCPServer((host, port), Handler) as httpd:
