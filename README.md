@@ -881,8 +881,9 @@ This command:
 
 **What stays unchanged:**
 - Your projects and configurations
-- Project-specific `antioch/` directories. A build uses the project's own copy when it has one, so to move a
-  project to the updated framework delete its `antioch/` folder and run `antioch env`, then `antioch build`
+- Project-specific `antioch/` directories. A build uses the project's own copy of the framework when it has one
+  (so any files you added to it are kept), but always takes the boot loader (`boot.js`) from the installed tooling.
+  To adopt framework changes in a project, merge them into its `antioch/` folder yourself; don't delete the folder
 
 After updating, rebuild your projects to use the new framework:
 

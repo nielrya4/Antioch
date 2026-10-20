@@ -269,6 +269,7 @@ def build_page(
     import os
     import glob
     import json
+    import shutil
     from pathlib import Path
 
     # Generate splash screen HTML
@@ -365,18 +366,25 @@ def build_page(
     favicon_html = _favicon_tags(favicon_href, favicon_mime)
 
     # The framework is served from the output folder, so that copy is the one
-    # to bundle and to take boot.js from; fall back to a local checkout if the
-    # environment has not been initialised.
+    # to bundle; fall back to a local checkout if the environment has not been
+    # initialised.
     framework_dir = next((d for d in (os.path.join(output_dir, "antioch"), "antioch")
                           if os.path.isdir(d)), None)
     if framework_dir is None:
         raise FileNotFoundError(
             "antioch library not found. Run init_environment() (or 'antioch env') first")
-    boot_js = os.path.join(framework_dir, "boot.js")
-    if not os.path.exists(boot_js):
+
+    # boot.js belongs to this build tooling, not to a project's own copy of the
+    # framework: it has to agree with the config written below, and a project
+    # that pinned an older antioch/ folder should still get loader fixes. So
+    # the build always installs the one that ships beside this file.
+    boot_js_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "antioch", "boot.js")
+    if not os.path.exists(boot_js_source):
         raise FileNotFoundError(
-            f"{boot_js} not found: this project's antioch/ folder predates the boot loader. "
-            "Delete the antioch/ folder and run 'antioch env' to copy in the current framework")
+            f"{boot_js_source} not found. Reinstall Antioch or run 'antioch update'")
+    boot_js = os.path.join(output_dir, "antioch", "boot.js")
+    os.makedirs(os.path.dirname(boot_js), exist_ok=True)
+    shutil.copyfile(boot_js_source, boot_js)
 
     # Application sources: the scripts folder, or loose .py files beside the build.
     app_sources = {}

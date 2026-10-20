@@ -97,12 +97,15 @@
     // Building a snapshot means booting a second interpreter. On the main
     // thread that is over a second of frozen page, so it happens in a worker,
     // after the app is up. The files it needs are already in the HTTP cache.
+    //
+    // It is a module worker that imports pyodide.mjs: current Pyodide refuses
+    // to load pyodide.js into a classic worker.
     function buildSnapshotInBackground() {
         const absolute = (url) => new URL(url, document.baseURI).href;
         const source = `
             self.onmessage = async (event) => {
                 try {
-                    importScripts(event.data.jsURL);
+                    const { loadPyodide } = await import(event.data.moduleURL);
                     const py = await loadPyodide({ indexURL: event.data.indexURL, _makeSnapshot: true });
                     self.postMessage({ snapshot: py.makeMemorySnapshot() });
                 } catch (e) {
@@ -110,7 +113,7 @@
                 }
             };`;
         const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-        const worker = new Worker(url);
+        const worker = new Worker(url, { type: "module" });
         const finish = () => { worker.terminate(); URL.revokeObjectURL(url); };
         worker.onmessage = async (event) => {
             finish();
@@ -127,7 +130,10 @@
             }
         };
         worker.onerror = (event) => { finish(); console.warn("Snapshot worker failed:", event.message); };
-        worker.postMessage({ jsURL: absolute(cfg.pyodide.jsURL), indexURL: absolute(cfg.pyodide.indexURL) });
+        worker.postMessage({
+            moduleURL: absolute(cfg.pyodide.jsURL.replace(/pyodide\.js$/, "pyodide.mjs")),
+            indexURL: absolute(cfg.pyodide.indexURL),
+        });
     }
 
     // ---- Interpreter -------------------------------------------------------
