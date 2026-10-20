@@ -92,7 +92,7 @@ Traditional Python web frameworks (Django, Flask) run Python on a server and sen
 - **Zero hosting costs** - Deploy to any static host (GitHub Pages, Netlify, S3, etc.)
 - **Instant deployment** - Just upload HTML files
 - **No backend complexity** - No databases, APIs, or server configuration
-- **Works offline** - Applications continue running without internet
+- **Works offline** - With `pyodide_source = "local"`, applications run without internet. CDN builds depend on the browser's cache once it has been loaded
 - **Enhanced privacy** - All data stays in the user's browser
 
 ---
@@ -830,8 +830,10 @@ This:
 2. Copies `antioch/` library to `output/antioch/`
 3. Copies `scripts/` directory to `output/scripts/`
 4. Copies `assets/` directory to `output/assets/`
-5. Generates `output/index.html` with Pyodide loader
-6. Embeds package dependencies from config
+5. Bundles Python sources into `output/antioch_sources.json` (framework) and `output/python_sources.json` (your scripts)
+6. Generates `output/index.html`, a thin page that hands the boot loader (`antioch/boot.js`) a config with your packages, bundles and assets
+
+A project's own `antioch/` folder is used when it has one, so you can add files to it (for example your own vendored JavaScript under `antioch/lib/vendor/`). The boot loader always comes from the installed tooling.
 
 ### antioch run
 
@@ -841,9 +843,12 @@ Start a local development server.
 antioch run                # Start on default port (8000)
 antioch run --port 3000    # Custom port
 antioch run --no-open      # Don't auto-open browser
+antioch run --https        # Serve https://localhost (self-signed certificate)
 ```
 
-Serves the `output/` directory and opens your browser automatically (unless `--no-open`).
+Serves the `output/` directory and opens your browser automatically (unless `--no-open`). Responses carry `Cache-Control: no-cache`, so a rebuild always shows up on reload.
+
+With `--https` (or `https = true` under `[server]`) the server uses a self-signed certificate for `localhost`, created with `openssl` on first use and stored in `~/.antioch/certs/` (shared by every project). Your browser will warn about it once; accept it. This is useful for features that need a secure origin, such as Google sign-in.
 
 ### antioch install
 
@@ -926,6 +931,7 @@ pyodide_version = "0.29.3"    # Used when pyodide_source = "cdn"
 splash_file = "scripts/splash.py"  # Optional: static splash screen
 title = "My Antioch App"      # Optional: browser tab title
 favicon = "assets/favicon.png"     # Optional: emoji, path, or URL
+snapshot = true               # Keep an interpreter snapshot in the browser for faster repeat visits
 
 [dependencies]
 # Pyodide built-in packages to load
@@ -947,6 +953,7 @@ local_packages = []
 host = "localhost"
 port = 8000
 auto_open = true              # Automatically open browser when running
+https = false                 # Serve https://localhost with a self-signed certificate
 ```
 
 ### Configuration Sections
@@ -993,6 +1000,7 @@ auto_open = true              # Automatically open browser when running
 - `host` - Development server host (default: `localhost`)
 - `port` - Development server port (default: `8000`)
 - `auto_open` - Auto-open browser when starting server (default: `true`)
+- `https` - Serve over HTTPS with a self-signed `localhost` certificate (default: `false`; same as `antioch run --https`)
 
 ---
 
@@ -1905,8 +1913,10 @@ my-antioch-project/
 │   ├── styles.css              # Custom CSS
 │   └── images/                 # Images
 ├── output/                     # Build output (generated)
-│   ├── index.html              # Generated HTML
-│   ├── antioch/                # Copied framework
+│   ├── index.html              # Generated page (config + boot loader tag)
+│   ├── antioch_sources.json    # Framework Python sources, versioned by content hash
+│   ├── python_sources.json     # Your Python sources, versioned by content hash
+│   ├── antioch/                # Copied framework (includes boot.js)
 │   ├── scripts/                # Copied scripts
 │   └── assets/                 # Copied assets
 └── antioch.toml                # Project configuration
@@ -2042,7 +2052,7 @@ aws s3 sync output/ s3://your-bucket-name/ --acl public-read
 ### CDN vs Local Pyodide
 
 **CDN (Recommended for production):**
-- Small build size (~8MB)
+- Small build size (a few MB)
 - Fast global delivery
 - Automatic updates
 - Browser caching across sites
@@ -2054,7 +2064,7 @@ pyodide_version = "0.29.3"
 ```
 
 **Local (For offline or custom builds):**
-- Large build size (~300MB)
+- Large build size (~420MB)
 - Works offline
 - Specific Pyodide version
 - No external dependencies
@@ -2066,20 +2076,28 @@ pyodide_source = "local"
 
 ### Performance Optimization
 
-**First Load:**
-- ~300-420MB Pyodide download (one-time, cached by browser)
-- ~2-5 seconds initialization time
+Typical numbers, measured in Chromium on a project using numpy and a pure-Python package, with CDN Pyodide:
 
-**Subsequent Loads:**
-- Instant (served from cache)
-- ~100ms app initialization
+**First visit:** about 3 seconds on a fast connection, bandwidth-bound at roughly 9 MB (the interpreter is about 5 MB, numpy about 3 MB). The interpreter, packages and your sources download in parallel.
+
+**Repeat visits:** about 0.8 seconds. The browser already caches Pyodide and its packages, so repeat visits are CPU-bound (starting the interpreter and importing packages). With `snapshot = true` (the default) the interpreter starts from a snapshot kept in IndexedDB instead, which roughly halves that time. The snapshot is saved in the background after the first visit finishes loading.
+
+**After you redeploy:** every URL the page fetches carries a hash of its content. Files you did not change keep their URL and stay cached. Your app and the framework are separate bundles, so changing your code does not make anyone download the framework again.
 
 **Optimization Tips:**
-1. Use CDN Pyodide for smaller builds
-2. Minimize package dependencies
+1. Keep the package list short: it is most of the first-visit download (numpy alone is about 3 MB)
+2. Use CDN Pyodide for smaller builds
 3. Lazy-load large components
-4. Use browser caching headers
+4. Serve `index.html` so that browsers revalidate it, and let everything else cache for a long time; the hashed URLs make that safe
 5. Compress assets (gzip/brotli)
+
+### Troubleshooting
+
+**The first visit works but the app seems to ignore a rebuild.** `antioch run` sends `Cache-Control: no-cache`. On another host, make sure `index.html` is revalidated, since it holds the hashes of everything else.
+
+**Startup seems to use an old interpreter.** The snapshot lives in the browser's IndexedDB under the name `antioch-boot`. Clear site data (or delete that database in the browser's developer tools) to rebuild it, or set `snapshot = false` in `antioch.toml`. A snapshot that cannot be loaded is discarded and the page boots normally.
+
+**The build says a file is missing from `antioch/`.** Your project's own `antioch/` folder is used as is, so a file added to the framework later is not in it. Copy the file in from the installed framework (`~/.antioch/antioch/`). Do not delete the folder: anything you added to it would be lost.
 
 ---
 
@@ -2158,8 +2176,8 @@ js.document.title = "New Title"
 
 ### How big are the builds?
 
-- **CDN builds**: ~8MB (just your code + config)
-- **Local builds**: ~300MB (includes Pyodide runtime)
+- **CDN builds**: a few MB (your code, the framework and its bundled JavaScript libraries)
+- **Local builds**: ~420MB (includes the Pyodide runtime)
 
 The browser caches Pyodide, so users only download it once.
 
@@ -2204,7 +2222,7 @@ Contributions are welcome! Please:
 3. Make your changes
 4. Submit a pull request
 
-Report bugs and request features via [GitHub Issues](https://github.com/ryanmccauley/antioch/issues).
+Report bugs and request features via [GitHub Issues](https://github.com/nielrya4/Antioch/issues).
 
 ---
 
@@ -2231,8 +2249,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Documentation**: This README + inline examples
 - **Examples**: `scripts/examples/` directory (20+ demos)
-- **Issues**: [GitHub Issues](https://github.com/ryanmccauley/antioch/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ryanmccauley/antioch/discussions)
+- **Issues**: [GitHub Issues](https://github.com/nielrya4/Antioch/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/nielrya4/Antioch/discussions)
 
 ---
 
