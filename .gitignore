@@ -78,7 +78,6 @@ desktop.ini
 
 # Build artifacts
 output/
-build_installer
 
 # Pyodide runtime (large - download separately)
 pyodide/
@@ -90,5 +89,4 @@ pyodide/
 *.local
 .scratch/
 temp/
-tmp/antioch-installer.sh
-/build_installer/output/*.sh
+tmp/

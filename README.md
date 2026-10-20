@@ -99,36 +99,40 @@ Traditional Python web frameworks (Django, Flask) run Python on a server and sen
 
 ## Installation
 
-### Option 1: Portable Installer (Recommended)
+### Option 1: Install Script (Recommended)
 
-The installer is a single 7.9MB file that includes everything you need:
+One command installs the latest Antioch from GitHub. It needs `python3` (3.9+) and `git`, on Linux or macOS (on Windows, use WSL). Nothing else is required, not even `pip`:
 
 ```bash
-# Download and run installer
-curl -sSL https://github.com/nielrya4/antioch/releases/latest/download/antioch-installer.sh | bash
-
-# Or download manually and install
-wget https://github.com/nielrya4/antioch/releases/latest/download/antioch-installer.sh
-bash antioch-installer.sh
-
-# System-wide installation (requires sudo)
-sudo bash antioch-installer.sh --system
+curl -sSL https://raw.githubusercontent.com/nielrya4/Antioch/master/install.sh | bash
 ```
 
-This installs the `antioch` command to your PATH (~/.local/bin or /usr/local/bin).
+This installs the framework, the CLI and its build tooling to `~/.antioch/` and puts an `antioch` command in `~/.local/bin` (add it to your `PATH` if the installer says so). Running it again upgrades an existing installation.
+
+Options go after `bash -s --`:
+
+```bash
+# System-wide (installs to /opt/antioch, command in /usr/local/bin)
+curl -sSL https://raw.githubusercontent.com/nielrya4/Antioch/master/install.sh | sudo bash -s -- --system
+
+# A different branch or repository
+curl -sSL https://raw.githubusercontent.com/nielrya4/Antioch/master/install.sh | bash -s -- --branch dev
+
+# Uninstall
+curl -sSL https://raw.githubusercontent.com/nielrya4/Antioch/master/install.sh | bash -s -- --uninstall
+```
 
 ### Option 2: From Source
 
 ```bash
-# Clone repository
-git clone https://github.com/ryanmccauley/antioch.git
-cd antioch
+git clone https://github.com/nielrya4/Antioch.git
+cd Antioch
 
-# Use development CLI
-./build_installer/antioch-cli env
+# Install the checkout the same way the script does
+bash install.sh --repo "file://$PWD"
 
-# Or install CLI with pip
-pip install -e .
+# Or run the CLI straight from the checkout
+python3 cli.py env
 ```
 
 ### Verify Installation
@@ -866,15 +870,16 @@ This command:
 1. Creates a backup of your current Antioch installation
 2. Clones the latest version from GitHub
 3. Replaces the framework library in `~/.antioch/antioch/`
-4. Keeps your CLI, build tools, and projects unchanged
+4. Replaces `~/.antioch/environment.py` and `~/.antioch/cli.py` so the CLI and build tooling match the framework
+5. Keeps your projects unchanged
 
 **What gets updated:**
 - Antioch framework library (`antioch/` directory)
+- `environment.py` and `cli.py` (the CLI itself)
 - All themes and macros
 - Core functionality improvements
 
 **What stays unchanged:**
-- Your CLI and build tools
 - Your projects and configurations
 - Project-specific `antioch/` directories (you'll need to run `antioch build` to use the updated framework)
 
